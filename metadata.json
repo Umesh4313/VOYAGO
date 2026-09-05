@@ -1,0 +1,6 @@
+{
+  "name": "VOYAGO – Smart Trip Planner & Travel Management System",
+  "description": "A complete college Semester 5 full-stack travel management platform with role-based dashboards for Customer, Hotel Partner, Vehicle Partner, and Admin.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
