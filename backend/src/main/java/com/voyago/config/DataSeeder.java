@@ -36,6 +36,7 @@ public class DataSeeder implements CommandLineRunner {
     public void run(String... args) {
         if (seedDevelopmentAccounts) {
             seedDevelopmentAccounts();
+            seedDemoPartnerInventory();
         }
         seedDestinations();
         seedHotels();
@@ -68,6 +69,71 @@ public class DataSeeder implements CommandLineRunner {
         user.setPartnerStatus(partnerStatus);
         user.setActive(true);
         userRepository.save(user);
+    }
+
+    private void seedDemoPartnerInventory() {
+        userRepository.findByEmail("hotel@gmail.com").ifPresent(partner -> {
+            partner.setPartnerBusinessName("Aaranya Coast Resort");
+            userRepository.save(partner);
+            if (hotelRepository.findByPartnerId(partner.getId()).isEmpty()) {
+                hotelRepository.save(Hotel.builder()
+                    .id("ht-demo-1")
+                    .name("Aaranya Coast Resort")
+                    .destinationId("dest-goa")
+                    .destinationName("Goa")
+                    .rating(4.7)
+                    .reviewCount(248)
+                    .address("Candolim Beach Road, Goa 403515")
+                    .city("Goa")
+                    .description("Demo partner property with coastal rooms, pool access, and breakfast included.")
+                    .heroImage("https://images.unsplash.com/photo-1566073771259-6a8506099945?w=800&auto=format&fit=crop&q=80")
+                    .amenities(List.of("Pool", "Breakfast", "Wi-Fi", "Airport Transfer"))
+                    .partnerId(partner.getId())
+                    .priceStartsFrom(5600)
+                    .rooms(List.of(HotelRoom.builder()
+                        .id("rm-demo-1")
+                        .name("Coastal Deluxe Room")
+                        .type("Deluxe")
+                        .pricePerNight(5600)
+                        .maxGuests(2)
+                        .capacity(2)
+                        .bedType("1 King Bed")
+                        .amenities(List.of("Sea View", "Breakfast", "Wi-Fi"))
+                        .totalUnits(12)
+                        .bookedUnits(4)
+                        .availableCount(8)
+                        .imageUrl("https://images.unsplash.com/photo-1618773928121-c32242e63f39?w=600&auto=format&fit=crop&q=80")
+                        .build()))
+                    .status("ACTIVE")
+                    .build());
+            }
+        });
+
+        userRepository.findByEmail("vehicle@gmail.com").ifPresent(partner -> {
+            partner.setPartnerBusinessName("Coastal Drive Rentals");
+            userRepository.save(partner);
+            if (vehicleRepository.findByPartnerId(partner.getId()).isEmpty()) {
+                vehicleRepository.save(Vehicle.builder()
+                    .id("veh-demo-1")
+                    .name("Mahindra Thar Demo Fleet")
+                    .type("CAR")
+                    .category("Adventure SUV")
+                    .destinationId("dest-goa")
+                    .dailyRate(2600)
+                    .transmission("Manual")
+                    .seats(4)
+                    .fuelType("Petrol")
+                    .rating(4.8)
+                    .imageUrl("https://images.unsplash.com/photo-1533473359331-0135ef1b58bf?w=600&auto=format&fit=crop&q=80")
+                    .features(List.of("Beach Permit", "Roadside Assistance", "Unlimited Kilometers"))
+                    .isAvailable(true)
+                    .rentalStatus("AVAILABLE")
+                    .partnerId(partner.getId())
+                    .registrationNumber("GA-09-DEMO-01")
+                    .modelYear(2025)
+                    .build());
+            }
+        });
     }
 
     private void seedDestinations() {

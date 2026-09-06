@@ -52,10 +52,13 @@ export const HotelPartnerDashboard: React.FC = () => {
     logout,
     notifications,
     addNotification,
+    addHotel,
   } = useApp();
 
   // Find partner's hotel
-  const myHotel = hotels.find((h) => h.partnerId === currentUser.id);
+  const myHotel = hotels.find(
+    (h) => h.partnerId === currentUser.id || (currentUser.email === 'hotel@gmail.com' && h.partnerId === 'demo-hotel-partner')
+  );
 
   const [activeTab, setActiveTab] = useState<HotelTab>('dashboard');
   const [revenuePeriod, setRevenuePeriod] = useState<RevenuePeriod>('current');
@@ -82,27 +85,72 @@ export const HotelPartnerDashboard: React.FC = () => {
   );
 
   // Hotel property details state
-  const [propName, setPropName] = useState(myHotel.name);
-  const [propAddress, setPropAddress] = useState(myHotel.address);
-  const [propDesc, setPropDesc] = useState(myHotel.description);
+  const [propName, setPropName] = useState(myHotel?.name || '');
+  const [propAddress, setPropAddress] = useState(myHotel?.address || '');
+  const [propDesc, setPropDesc] = useState(myHotel?.description || '');
   const [propPhone, setPropPhone] = useState('+91 832 6683333');
   const [propEmail, setPropEmail] = useState('taj.goa@partner.voyago.com');
 
   if (!myHotel) {
     return (
       <div className="max-w-4xl mx-auto px-6 py-16">
-        <div className="bg-white border border-stone-200 rounded-3xl p-10 text-center shadow-xs">
-          <h1 className="text-3xl font-bold text-stone-900">Welcome, {currentUser.name}</h1>
-          <p className="mt-3 text-stone-500">
-            Your hotel partner account is ready. Add your first property to start managing rooms and bookings.
-          </p>
-          <button
-            type="button"
-            onClick={logout}
-            className="mt-8 px-5 py-3 rounded-full bg-[#9D3373] text-white font-bold text-sm"
-          >
-            Sign out
-          </button>
+        <div className="bg-white border border-stone-200 rounded-3xl p-6 md:p-10 shadow-xs">
+          <div className="max-w-2xl mx-auto">
+            <span className="text-[10px] uppercase font-bold tracking-widest text-[#9D3373]">Hotel Partner Console</span>
+            <h1 className="mt-2 text-3xl font-bold text-stone-900">Set up your first property</h1>
+            <p className="mt-3 text-stone-500">
+              Welcome, {currentUser.name}. Complete these details to open your property dashboard.
+            </p>
+            <form
+              className="mt-8 space-y-4"
+              onSubmit={(event) => {
+                event.preventDefault();
+                if (!propName.trim() || !propAddress.trim()) {
+                  setToast('Property name and address are required.');
+                  return;
+                }
+                addHotel({
+                  name: propName.trim(),
+                  destinationId: 'dest-goa',
+                  destinationName: 'Goa',
+                  rating: 0,
+                  reviewCount: 0,
+                  address: propAddress.trim(),
+                  city: 'Goa',
+                  description: propDesc.trim(),
+                  heroImage: newRoomImage,
+                  gallery: [],
+                  amenities: [],
+                  partnerId: currentUser.id,
+                  priceStartsFrom: 0,
+                  rooms: [],
+                  status: 'INACTIVE',
+                });
+              }}
+            >
+              <label className="block text-sm font-semibold text-stone-700">
+                Property name
+                <input className="mt-1 w-full rounded-xl border border-stone-300 px-4 py-3" value={propName} onChange={(event) => setPropName(event.target.value)} required />
+              </label>
+              <label className="block text-sm font-semibold text-stone-700">
+                Address
+                <input className="mt-1 w-full rounded-xl border border-stone-300 px-4 py-3" value={propAddress} onChange={(event) => setPropAddress(event.target.value)} required />
+              </label>
+              <label className="block text-sm font-semibold text-stone-700">
+                Description
+                <textarea className="mt-1 w-full rounded-xl border border-stone-300 px-4 py-3" rows={4} value={propDesc} onChange={(event) => setPropDesc(event.target.value)} />
+              </label>
+              <div className="flex flex-wrap gap-3 pt-2">
+                <button type="submit" className="px-5 py-3 rounded-full bg-[#9D3373] text-white font-bold text-sm">
+                  Create property dashboard
+                </button>
+                <button type="button" onClick={logout} className="px-5 py-3 rounded-full border border-stone-300 text-stone-700 font-bold text-sm">
+                  Sign out
+                </button>
+              </div>
+            </form>
+            {toast && <p className="mt-4 text-sm text-[#9D3373]">{toast}</p>}
+          </div>
         </div>
       </div>
     );
@@ -136,7 +184,7 @@ export const HotelPartnerDashboard: React.FC = () => {
   };
 
   const startRoomEdit = (room: HotelRoom) => {
-    startRoomEdit(room);
+    setEditingRoomId(room.id);
     setRoomUnits(room.totalUnits || 10);
     setRoomName(room.name);
     setRoomBed(room.bedType);

@@ -24,6 +24,7 @@ import {
   TRAVEL_OPTIONS,
   HOTELS,
   VEHICLES,
+  INITIAL_BOOKINGS,
   TOURIST_PLACES,
   INITIAL_AUDIT_LOGS,
 } from '../data/mockData';
@@ -94,6 +95,7 @@ interface AppContextType {
   updateHotelRoomPrice: (hotelId: string, roomId: string, newPrice: number) => void;
   updateHotelRoomDetails: (hotelId: string, roomId: string, newPrice: number, newTotalUnits: number, details?: Partial<Pick<HotelRoom, 'name' | 'bedType' | 'maxGuests'>>) => void;
   addHotelRoomType: (hotelId: string, room: Omit<HotelRoom, 'id' | 'availableCount'>) => void;
+  addHotel: (hotel: Omit<Hotel, 'id'>) => void;
   toggleHotelRoomAvailability: (hotelId: string, roomId: string) => void;
 
   updateVehiclePriceAndStatus: (vehicleId: string, newDailyRate: number, isAvailable: boolean) => void;
@@ -164,7 +166,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   });
 
   const [users, setUsers] = useState<User[]>(() => {
-    return safeGetItem<User[]>(
+    const storedUsers = safeGetItem<User[]>(
       `${LOCAL_STORAGE_PREFIX}users_list`,
       INITIAL_USERS.map((u) => ({
         ...u,
@@ -173,6 +175,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         createdAt: '2026-01-15',
       }))
     );
+    const demoUsers = INITIAL_USERS.filter((user) => user.email.endsWith('@gmail.com'));
+    return [
+      ...storedUsers,
+      ...demoUsers.filter((demoUser) => !storedUsers.some((user) => user.email === demoUser.email)).map((user) => ({
+        ...user,
+        partnerStatus: user.role.includes('PARTNER') ? ('APPROVED' as PartnerStatus) : undefined,
+        isActive: true,
+        createdAt: '2026-01-15',
+      })),
+    ];
   });
 
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(() => (
@@ -222,7 +234,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         availableCount: r.availableCount,
       })),
     }));
-    return safeGetItem<Hotel[]>(`${LOCAL_STORAGE_PREFIX}hotels`, fallback);
+    const storedHotels = safeGetItem<Hotel[]>(`${LOCAL_STORAGE_PREFIX}hotels`, fallback);
+    const demoHotel = fallback.find((hotel) => hotel.id === 'ht-demo-1');
+    return demoHotel && !storedHotels.some((hotel) => hotel.id === demoHotel.id)
+      ? [...storedHotels, demoHotel]
+      : storedHotels;
   });
 
   const [vehicles, setVehicles] = useState<Vehicle[]>(() => {
@@ -232,7 +248,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       registrationNumber: `GA-01-E-${Math.floor(1000 + Math.random() * 9000)}`,
       modelYear: 2024,
     }));
-    return safeGetItem<Vehicle[]>(`${LOCAL_STORAGE_PREFIX}vehicles`, fallback);
+    const storedVehicles = safeGetItem<Vehicle[]>(`${LOCAL_STORAGE_PREFIX}vehicles`, fallback);
+    const demoVehicle = fallback.find((vehicle) => vehicle.id === 'veh-demo-1');
+    return demoVehicle && !storedVehicles.some((vehicle) => vehicle.id === demoVehicle.id)
+      ? [...storedVehicles, demoVehicle]
+      : storedVehicles;
   });
 
   const [touristPlaces, setTouristPlaces] = useState<TouristPlace[]>(() => {
@@ -356,7 +376,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setBookings([]);
     bookingService.getMyBookings(currentUser.id)
       .then((userBookings) => {
-        if (isCurrentUser) setBookings(userBookings);
+        if (isCurrentUser) {
+          const demoBookings = currentUser.email === 'customer@gmail.com'
+            ? INITIAL_BOOKINGS.map((booking) => ({
+                ...booking,
+                id: `DEMO-${booking.id}`,
+                userId: currentUser.id,
+                customerName: currentUser.name,
+                customerEmail: currentUser.email,
+                customerPhone: currentUser.phone || booking.customerPhone,
+              }))
+            : [];
+          setBookings(userBookings.length > 0 ? userBookings : demoBookings);
+        }
       })
       .catch((error) => console.error('Failed to load bookings from the database.', error));
     return () => {
@@ -906,6 +938,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     addAuditLog('ROOM_ADDED', 'HotelRoom', newRoom.id, `Added room type ${newRoom.name}`);
   };
 
+  const addHotel = (hotelData: Omit<Hotel, 'id'>) => {
+    const hotel: Hotel = {
+      ...hotelData,
+      id: `hotel-${Date.now()}`,
+    };
+    setHotels((prev) => [...prev, hotel]);
+    addAuditLog('HOTEL_ADDED', 'Hotel', hotel.id, `Added hotel ${hotel.name}`);
+  };
+
   const toggleHotelRoomAvailability = (hotelId: string, roomId: string) => {
     setHotels((prev) =>
       prev.map((h) => {
@@ -1091,6 +1132,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         updateHotelRoomPrice,
         updateHotelRoomDetails,
         addHotelRoomType,
+        addHotel,
         toggleHotelRoomAvailability,
         updateVehiclePriceAndStatus,
         setVehicleRentalStatus,

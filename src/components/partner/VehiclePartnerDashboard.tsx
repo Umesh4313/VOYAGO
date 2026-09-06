@@ -53,7 +53,9 @@ export const VehiclePartnerDashboard: React.FC = () => {
   } = useApp();
 
   // Partner manages Goa fleet
-  const myVehicles = vehicles.filter((v) => v.partnerId === currentUser.id);
+  const myVehicles = vehicles.filter(
+    (v) => v.partnerId === currentUser.id || (currentUser.email === 'vehicle@gmail.com' && v.partnerId === 'demo-vehicle-partner')
+  );
 
   const [activeTab, setActiveTab] = useState<VehicleTab>('dashboard');
   const [revenuePeriod, setRevenuePeriod] = useState<RevenuePeriod>('current');

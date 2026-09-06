@@ -2,12 +2,16 @@ package com.voyago.service;
 
 import com.voyago.dto.AnalyticsSummaryResponse;
 import com.voyago.model.AuditLog;
+import com.voyago.model.Hotel;
 import com.voyago.model.PlatformSettings;
 import com.voyago.model.User;
+import com.voyago.model.Vehicle;
 import com.voyago.repository.AuditLogRepository;
 import com.voyago.repository.BookingRepository;
+import com.voyago.repository.HotelRepository;
 import com.voyago.repository.PlatformSettingsRepository;
 import com.voyago.repository.UserRepository;
+import com.voyago.repository.VehicleRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -24,6 +28,8 @@ public class AdminService {
     private final BookingRepository bookingRepository;
     private final AuditLogRepository auditLogRepository;
     private final PlatformSettingsRepository platformSettingsRepository;
+    private final HotelRepository hotelRepository;
+    private final VehicleRepository vehicleRepository;
 
     public List<User> getAllUsers() {
         return userRepository.findAll();
@@ -110,6 +116,95 @@ public class AdminService {
                 .monthlyRevenue(monthlyRevenue)
                 .monthlyOrderCount(monthlyOrderCount)
                 .build();
+    }
+
+    public List<Map<String, Object>> getHotelPartners() {
+        List<User> hotelPartners = userRepository.findAll().stream()
+                .filter(u -> "HOTEL_PARTNER".equals(u.getRole()))
+                .collect(Collectors.toList());
+        
+        return hotelPartners.stream()
+                .map(partner -> {
+                    Map<String, Object> data = new LinkedHashMap<>();
+                    data.put("id", partner.getId());
+                    data.put("name", partner.getName());
+                    data.put("email", partner.getEmail());
+                    data.put("phone", partner.getPhone());
+                    data.put("partnerBusinessName", partner.getPartnerBusinessName());
+                    data.put("partnerStatus", partner.getPartnerStatus());
+                    data.put("createdAt", partner.getCreatedAt());
+                    data.put("isActive", partner.isActive());
+                    
+                    long hotelCount = hotelRepository.findByPartnerId(partner.getId()).size();
+                    data.put("hotelCount", hotelCount);
+                    
+                    return data;
+                })
+                .collect(Collectors.toList());
+    }
+
+    public List<Map<String, Object>> getVehiclePartners() {
+        List<User> vehiclePartners = userRepository.findAll().stream()
+                .filter(u -> "VEHICLE_PARTNER".equals(u.getRole()))
+                .collect(Collectors.toList());
+        
+        return vehiclePartners.stream()
+                .map(partner -> {
+                    Map<String, Object> data = new LinkedHashMap<>();
+                    data.put("id", partner.getId());
+                    data.put("name", partner.getName());
+                    data.put("email", partner.getEmail());
+                    data.put("phone", partner.getPhone());
+                    data.put("partnerBusinessName", partner.getPartnerBusinessName());
+                    data.put("partnerStatus", partner.getPartnerStatus());
+                    data.put("createdAt", partner.getCreatedAt());
+                    data.put("isActive", partner.isActive());
+                    
+                    long vehicleCount = vehicleRepository.findByPartnerId(partner.getId()).size();
+                    data.put("vehicleCount", vehicleCount);
+                    
+                    return data;
+                })
+                .collect(Collectors.toList());
+    }
+
+    public List<Map<String, Object>> getHotelsByPartnerId(String partnerId) {
+        List<Hotel> hotels = hotelRepository.findByPartnerId(partnerId);
+        return hotels.stream()
+                .map(hotel -> {
+                    Map<String, Object> data = new LinkedHashMap<>();
+                    data.put("id", hotel.getId());
+                    data.put("name", hotel.getName());
+                    data.put("address", hotel.getAddress());
+                    data.put("city", hotel.getCity());
+                    data.put("destinationName", hotel.getDestinationName());
+                    data.put("rating", hotel.getRating());
+                    data.put("reviewCount", hotel.getReviewCount());
+                    data.put("heroImage", hotel.getHeroImage());
+                    data.put("status", hotel.getStatus());
+                    int roomCount = hotel.getRooms() != null ? hotel.getRooms().size() : 0;
+                    data.put("roomCount", roomCount);
+                    return data;
+                })
+                .collect(Collectors.toList());
+    }
+
+    public List<Map<String, Object>> getVehiclesByPartnerId(String partnerId) {
+        List<Vehicle> vehicles = vehicleRepository.findByPartnerId(partnerId);
+        return vehicles.stream()
+                .map(vehicle -> {
+                    Map<String, Object> data = new LinkedHashMap<>();
+                    data.put("id", vehicle.getId());
+                    data.put("name", vehicle.getName());
+                    data.put("registrationNumber", vehicle.getRegistrationNumber());
+                    data.put("type", vehicle.getType());
+                    data.put("seats", vehicle.getSeats());
+                    data.put("dailyRate", vehicle.getDailyRate());
+                    data.put("isAvailable", vehicle.isAvailable());
+                    data.put("rentalStatus", vehicle.getRentalStatus());
+                    return data;
+                })
+                .collect(Collectors.toList());
     }
 
     public List<AuditLog> getAuditLogs() {

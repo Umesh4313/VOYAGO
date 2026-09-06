@@ -35,6 +35,7 @@ import {
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { Hotel, TravelMode, Destination, TouristPlace, TravelOption } from '../../types';
+import { apiClient } from '../../services/api';
 
 type AdminTab =
   | 'dashboard'
@@ -48,6 +49,45 @@ type AdminTab =
   | 'analytics'
   | 'logs'
   | 'settings';
+
+interface PartnerSummary {
+  id: string;
+  name: string;
+  email: string;
+  phone?: string;
+  partnerBusinessName?: string;
+  partnerStatus?: string;
+  createdAt?: string;
+  hotelCount?: number;
+  vehicleCount?: number;
+}
+
+interface HotelInventoryItem {
+  id: string;
+  name: string;
+  address?: string;
+  city?: string;
+  destinationName?: string;
+  rating?: number;
+  reviewCount?: number;
+  status?: string;
+  roomCount?: number;
+}
+
+interface VehicleInventoryItem {
+  id: string;
+  name: string;
+  registrationNumber?: string;
+  type?: string;
+  seats?: number;
+  dailyRate?: number;
+  isAvailable?: boolean;
+  rentalStatus?: string;
+}
+
+type PartnerInventory =
+  | { kind: 'hotels'; partnerName: string; items: HotelInventoryItem[] }
+  | { kind: 'vehicles'; partnerName: string; items: VehicleInventoryItem[] };
 
 // ─── SVG Bar Chart ───────────────────────────────────────────────────────────
 const BarChart: React.FC<{ data: { label: string; value: number }[]; color?: string }> = ({
@@ -198,6 +238,64 @@ export const AdminDashboard: React.FC = () => {
       console.error('Failed to load registered users for the admin dashboard.', error);
     });
   }, [activeTab, refreshUsers]);
+
+  const [hotelPartners, setHotelPartners] = useState<PartnerSummary[]>([]);
+  const [vehiclePartners, setVehiclePartners] = useState<PartnerSummary[]>([]);
+  const [loadingPartners, setLoadingPartners] = useState(false);
+  const [partnerInventory, setPartnerInventory] = useState<PartnerInventory | null>(null);
+  const [loadingInventory, setLoadingInventory] = useState(false);
+
+  const viewPartnerInventory = async (partner: PartnerSummary, kind: 'hotels' | 'vehicles') => {
+    setLoadingInventory(true);
+    try {
+      const endpoint = kind === 'hotels'
+        ? `/admin/hotel-partners/${partner.id}/hotels`
+        : `/admin/vehicle-partners/${partner.id}/vehicles`;
+      const { data } = await apiClient.get<HotelInventoryItem[] | VehicleInventoryItem[]>(endpoint);
+      setPartnerInventory({
+        kind,
+        partnerName: partner.name,
+        items: data,
+      } as PartnerInventory);
+    } catch (error) {
+      console.error(`Failed to load ${kind} for partner:`, error);
+      showToast(`Unable to load ${kind === 'hotels' ? 'hotels' : 'vehicles'} for this partner.`);
+    } finally {
+      setLoadingInventory(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab !== 'hotels') return;
+    setLoadingPartners(true);
+    apiClient
+      .get<PartnerSummary[]>('/admin/hotel-partners')
+      .then(({ data }) => {
+        setHotelPartners(data);
+      })
+      .catch((error: unknown) => {
+        console.error('Failed to load hotel partners:', error);
+      })
+      .finally(() => {
+        setLoadingPartners(false);
+      });
+  }, [activeTab]);
+
+  useEffect(() => {
+    if (activeTab !== 'vehicles') return;
+    setLoadingPartners(true);
+    apiClient
+      .get<PartnerSummary[]>('/admin/vehicle-partners')
+      .then(({ data }) => {
+        setVehiclePartners(data);
+      })
+      .catch((error: unknown) => {
+        console.error('Failed to load vehicle partners:', error);
+      })
+      .finally(() => {
+        setLoadingPartners(false);
+      });
+  }, [activeTab]);
 
   const [logFilter, setLogFilter] = useState('');
   const [transportFilter, setTransportFilter] = useState<TravelMode | 'ALL'>('ALL');
@@ -1047,166 +1145,78 @@ export const AdminDashboard: React.FC = () => {
                       Hotel Partners &amp; Inventory Management
                     </h3>
                     <p className="text-xs text-stone-500">
-                      Partner status, verified property listings, room rates, and real-time inventory health
+                      Partner registrations, verified properties, and real-time inventory health
                     </p>
                   </div>
                   <span className="text-xs text-[#9D3373] font-medium px-3 py-1 rounded-full bg-[#9D3373]/10 border border-[#9D3373]/20">
-                    {hotels.length} Verified Properties Active
+                    {hotelPartners.length} Active Partners
                   </span>
                 </div>
 
-                <div className="space-y-4">
-                  {hotels.map((hotel) => (
-                    <div
-                      key={hotel.id}
-                      className="bg-[#FAF8F5] border border-stone-200 rounded-2xl p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 hover:border-stone-300 transition-all"
-                    >
-                      <div className="flex items-start gap-4">
-                        <img
-                          src={hotel.heroImage}
-                          alt={hotel.name}
-                          referrerPolicy="no-referrer"
-                          className="w-20 h-20 rounded-xl object-cover border border-stone-200 shrink-0"
-                        />
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <h4 className="font-serif-display text-xl font-light text-stone-900">{hotel.name}</h4>
-                            <span className="text-[10px] px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200 font-bold">
-                              Verified Partner
-                            </span>
+                {loadingPartners ? (
+                  <div className="text-center py-8">
+                    <p className="text-stone-600 text-sm">Loading hotel partners...</p>
+                  </div>
+                ) : hotelPartners.length === 0 ? (
+                  <div className="text-center py-8 bg-[#FAF8F5] rounded-2xl border border-dashed border-stone-300">
+                    <p className="text-stone-600 text-sm">No hotel partners registered yet</p>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {hotelPartners.map((partner) => (
+                      <div
+                        key={partner.id}
+                        className="bg-[#FAF8F5] border border-stone-200 rounded-2xl p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 hover:border-stone-300 transition-all"
+                      >
+                        <div className="flex items-start gap-4 flex-1">
+                          <div className="w-16 h-16 rounded-xl bg-gradient-to-br from-[#9D3373]/20 to-[#9D3373]/10 flex items-center justify-center shrink-0">
+                            <HotelIcon className="w-8 h-8 text-[#9D3373]" />
                           </div>
-                          <p className="text-xs text-stone-500 mt-1">
-                            {hotel.address} • {hotel.destinationName || 'Goa'} • ★ {hotel.rating} ({hotel.reviewCount || 120} reviews)
-                          </p>
-                          {(() => { const partner = users.find((u) => u.id === hotel.partnerId); return partner ? <div className="text-[11px] text-stone-600 mt-2 space-y-0.5"><p>Owner/Manager: {partner.name}</p><p>Email: {partner.email} • Phone: {partner.phone || 'Not provided'}</p><p>Property address: {hotel.address}</p></div> : null; })()}
-                          <div className="flex flex-wrap gap-2 mt-2">
-                            {hotel.rooms.map((r) => (
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2">
+                              <h4 className="font-serif-display text-xl font-light text-stone-900">{partner.name}</h4>
                               <span
-                                key={r.id}
-                                className="text-[10px] px-2 py-0.5 rounded bg-white border border-stone-200 text-stone-700"
+                                className={`text-[10px] px-2 py-0.5 rounded font-bold ${
+                                  partner.partnerStatus === 'APPROVED'
+                                    ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                    : partner.partnerStatus === 'PENDING'
+                                    ? 'bg-amber-50 text-amber-700 border border-amber-200'
+                                    : 'bg-rose-50 text-rose-700 border border-rose-200'
+                                }`}
                               >
-                                {r.name}: ₹{r.pricePerNight.toLocaleString()}/night ({r.availableCount || 0} units left)
+                                {partner.partnerStatus}
                               </span>
-                            ))}
+                            </div>
+                            <p className="text-xs text-stone-600 mt-1">
+                              <strong>Business:</strong> {partner.partnerBusinessName || 'Not specified'}
+                            </p>
+                            <p className="text-xs text-stone-600">
+                              <strong>Email:</strong> {partner.email} • <strong>Phone:</strong> {partner.phone || 'Not provided'}
+                            </p>
+                            <p className="text-xs text-stone-500 mt-1">
+                              Registered: {new Date(partner.createdAt).toLocaleDateString()}
+                            </p>
                           </div>
                         </div>
-                      </div>
 
-                      {/* Partner View button REMOVED — only Manage Rooms remains */}
-                      <div className="flex items-center gap-2 shrink-0 self-end md:self-center">
-                        <button
-                          type="button"
-                          onClick={() => setSelectedHotelForManage(hotel)}
-                          className="px-4 py-2 rounded-full bg-[#9D3373] hover:bg-[#862960] text-white font-bold uppercase tracking-wider text-xs shadow-xs flex items-center gap-1.5 transition-all cursor-pointer"
-                        >
-                          <Eye className="w-3.5 h-3.5" />
-                          <span>Manage Rooms &amp; Rates</span>
-                        </button>
-                        <button type="button" onClick={() => { if (window.confirm(`Remove ${hotel.name}?`)) { removeHotel(hotel.id); showToast('Hotel removed.'); } }} className="px-3 py-2 rounded-full border border-rose-200 text-rose-700 text-xs font-bold">Remove</button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-
-                {/* In-page Admin Hotel Management Modal */}
-                {selectedHotelForManage && (
-                  <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-900/60 backdrop-blur-xs animate-in fade-in">
-                    <div className="bg-white border border-stone-200 rounded-3xl max-w-2xl w-full p-6 md:p-8 space-y-6 shadow-2xl max-h-[90vh] overflow-y-auto">
-                      <div className="flex items-center justify-between pb-4 border-b border-stone-200">
-                        <div>
-                          <span className="text-[10px] font-bold uppercase tracking-widest text-[#9D3373]">
-                            Admin Room &amp; Tariff Governance
-                          </span>
-                          <h3 className="font-serif-display text-2xl font-light text-stone-900">
-                            {selectedHotelForManage.name}
-                          </h3>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => { setSelectedHotelForManage(null); setEditingRoomPriceId(null); }}
-                          className="w-8 h-8 rounded-full bg-stone-100 hover:bg-stone-200 flex items-center justify-center text-stone-600 hover:text-stone-900 cursor-pointer"
-                        >
-                          <X className="w-4 h-4" />
-                        </button>
-                      </div>
-                      <div className="space-y-4">
-                        <p className="text-xs text-stone-500 font-normal">
-                          Update real-time inventory pricing and seat/room allocations. Changes immediately sync across customer search and trip builder.
-                        </p>
-                        <div className="space-y-3">
-                          {selectedHotelForManage.rooms.map((room) => (
-                            <div
-                              key={room.id}
-                              className="bg-[#FAF8F5] border border-stone-200 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
-                            >
-                              <div>
-                                <h5 className="font-medium text-stone-900 text-sm">{room.name}</h5>
-                                <p className="text-xs text-stone-500">{room.type} • Bed: {room.bedType} • Max Guests: {room.maxGuests}</p>
-                                <p className="text-[11px] text-stone-400 mt-1">
-                                  Units: {room.availableCount ?? 8} available of {room.totalUnits ?? 8} total
-                                </p>
-                              </div>
-                              <div className="flex items-center gap-3">
-                                {editingRoomPriceId === room.id ? (
-                                  <div className="flex items-center gap-2">
-                                    <span className="text-xs text-stone-500">₹</span>
-                                    <input
-                                      type="number"
-                                      value={tempRoomPrice}
-                                      onChange={(e) => setTempRoomPrice(Number(e.target.value))}
-                                      className="w-24 bg-white border border-[#9D3373] rounded-lg px-2 py-1 text-xs text-stone-900"
-                                    />
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        if (tempRoomPrice > 0) {
-                                          updateHotelRoomPrice(selectedHotelForManage.id, room.id, tempRoomPrice);
-                                          showToast(`Updated ${room.name} rate to ₹${tempRoomPrice}`);
-                                          setEditingRoomPriceId(null);
-                                        }
-                                      }}
-                                      className="p-1.5 rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 cursor-pointer"
-                                    >
-                                      <Check className="w-3.5 h-3.5" />
-                                    </button>
-                                    <button
-                                      type="button"
-                                      onClick={() => setEditingRoomPriceId(null)}
-                                      className="p-1.5 rounded-lg bg-stone-100 text-stone-500 hover:bg-stone-200 cursor-pointer"
-                                    >
-                                      <X className="w-3.5 h-3.5" />
-                                    </button>
-                                  </div>
-                                ) : (
-                                  <div className="flex items-center gap-3">
-                                    <span className="font-serif-display text-lg text-[#9D3373] font-light">
-                                      ₹{room.pricePerNight.toLocaleString()}
-                                      <span className="text-[10px] text-stone-500 font-sans not-italic">/night</span>
-                                    </span>
-                                    <button
-                                      type="button"
-                                      onClick={() => { setEditingRoomPriceId(room.id); setTempRoomPrice(room.pricePerNight); }}
-                                      className="px-3 py-1 rounded-full bg-white border border-stone-200 hover:bg-stone-50 text-xs text-stone-700 cursor-pointer"
-                                    >
-                                      Edit Tariff
-                                    </button>
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-                          ))}
+                        <div className="flex items-center gap-2 shrink-0 self-end md:self-center">
+                          <div className="text-right">
+                            <p className="text-2xl font-bold text-[#9D3373]">{partner.hotelCount}</p>
+                            <p className="text-[10px] text-stone-600 uppercase tracking-wider font-medium">
+                              Properties
+                            </p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => viewPartnerInventory(partner, 'hotels')}
+                            className="px-4 py-2 rounded-full bg-[#9D3373] hover:bg-[#862960] text-white font-bold uppercase tracking-wider text-xs shadow-xs flex items-center gap-1.5 transition-all cursor-pointer"
+                          >
+                            <Eye className="w-3.5 h-3.5" />
+                            View Hotels
+                          </button>
                         </div>
                       </div>
-                      <div className="pt-4 border-t border-stone-200 flex justify-end">
-                        <button
-                          type="button"
-                          onClick={() => { setSelectedHotelForManage(null); setEditingRoomPriceId(null); }}
-                          className="px-5 py-2 rounded-full bg-[#9D3373] hover:bg-[#862960] text-xs uppercase font-bold tracking-wider text-white shadow-xs cursor-pointer"
-                        >
-                          Done
-                        </button>
-                      </div>
-                    </div>
+                    ))}
                   </div>
                 )}
               </div>
@@ -1217,44 +1227,86 @@ export const AdminDashboard: React.FC = () => {
             ══════════════════════════════════════════════════ */}
             {activeTab === 'vehicles' && (
               <div className="bg-white border border-stone-200 rounded-3xl p-6 md:p-8 space-y-6 shadow-xs animate-in fade-in">
-                <div>
-                  <h3 className="font-serif-display text-3xl font-light italic text-stone-900">
-                    Vehicle Partners Management
-                  </h3>
-                  <p className="text-xs text-stone-500">Rental fleet status, partner operations, and daily tariffs</p>
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div>
+                    <h3 className="font-serif-display text-3xl font-light italic text-stone-900">
+                      Vehicle Partners &amp; Fleet Management
+                    </h3>
+                    <p className="text-xs text-stone-500">
+                      Partner registrations, vehicle inventory, and rental operations
+                    </p>
+                  </div>
+                  <span className="text-xs text-[#9D3373] font-medium px-3 py-1 rounded-full bg-[#9D3373]/10 border border-[#9D3373]/20">
+                    {vehiclePartners.length} Active Partners
+                  </span>
                 </div>
-                <div className="space-y-4">
-                  {vehicles.map((v) => (
-                    <div
-                      key={v.id}
-                      className="bg-[#FAF8F5] border border-stone-200 rounded-2xl p-4 flex items-center justify-between"
-                    >
-                      <div className="flex items-center gap-3">
-                        <img
-                          src={v.imageUrl}
-                          alt={v.name}
-                          referrerPolicy="no-referrer"
-                          className="w-12 h-12 rounded-lg object-cover border border-stone-200"
-                        />
-                        <div>
-                          <h4 className="font-serif-display text-base font-light text-stone-900">{v.name}</h4>
-                          <p className="text-xs text-stone-500">{v.category} • {v.transmission} • ₹{v.dailyRate}/day</p>
-                          {(() => { const partner = users.find((u) => u.id === v.partnerId); return <div className="text-[11px] text-stone-600 mt-1 space-y-0.5"><p>Partner: {partner?.name || 'Unassigned'}</p><p>Email: {partner?.email || 'Not provided'} • Phone: {partner?.phone || 'Not provided'}</p><p>Base location: {destinations.find((d) => d.id === v.destinationId)?.name || 'Not provided'} {v.registrationNumber ? `• Reg: ${v.registrationNumber}` : ''}</p></div>; })()}
+
+                {loadingPartners ? (
+                  <div className="text-center py-8">
+                    <p className="text-stone-600 text-sm">Loading vehicle partners...</p>
+                  </div>
+                ) : vehiclePartners.length === 0 ? (
+                  <div className="text-center py-8 bg-[#FAF8F5] rounded-2xl border border-dashed border-stone-300">
+                    <p className="text-stone-600 text-sm">No vehicle partners registered yet</p>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {vehiclePartners.map((partner) => (
+                      <div
+                        key={partner.id}
+                        className="bg-[#FAF8F5] border border-stone-200 rounded-2xl p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 hover:border-stone-300 transition-all"
+                      >
+                        <div className="flex items-start gap-4 flex-1">
+                          <div className="w-16 h-16 rounded-xl bg-gradient-to-br from-[#9D3373]/20 to-[#9D3373]/10 flex items-center justify-center shrink-0">
+                            <Car className="w-8 h-8 text-[#9D3373]" />
+                          </div>
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2">
+                              <h4 className="font-serif-display text-xl font-light text-stone-900">{partner.name}</h4>
+                              <span
+                                className={`text-[10px] px-2 py-0.5 rounded font-bold ${
+                                  partner.partnerStatus === 'APPROVED'
+                                    ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                    : partner.partnerStatus === 'PENDING'
+                                    ? 'bg-amber-50 text-amber-700 border border-amber-200'
+                                    : 'bg-rose-50 text-rose-700 border border-rose-200'
+                                }`}
+                              >
+                                {partner.partnerStatus}
+                              </span>
+                            </div>
+                            <p className="text-xs text-stone-600 mt-1">
+                              <strong>Business:</strong> {partner.partnerBusinessName || 'Not specified'}
+                            </p>
+                            <p className="text-xs text-stone-600">
+                              <strong>Email:</strong> {partner.email} • <strong>Phone:</strong> {partner.phone || 'Not provided'}
+                            </p>
+                            <p className="text-xs text-stone-500 mt-1">
+                              Registered: {new Date(partner.createdAt).toLocaleDateString()}
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2 shrink-0 self-end md:self-center">
+                          <div className="text-right">
+                            <p className="text-2xl font-bold text-[#9D3373]">{partner.vehicleCount}</p>
+                            <p className="text-[10px] text-stone-600 uppercase tracking-wider font-medium">
+                              Vehicles
+                            </p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => viewPartnerInventory(partner, 'vehicles')}
+                            className="px-4 py-2 rounded-full bg-[#9D3373] hover:bg-[#862960] text-white font-bold uppercase tracking-wider text-xs shadow-xs flex items-center gap-1.5 transition-all cursor-pointer"
+                          >
+                            <Eye className="w-3.5 h-3.5" />
+                            View Vehicles
+                          </button>
                         </div>
                       </div>
-                      <span
-                        className={`text-xs px-2.5 py-1 rounded-full font-bold ${
-                          v.isAvailable
-                            ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                            : 'bg-rose-50 text-rose-700 border border-rose-200'
-                        }`}
-                      >
-                        {v.isAvailable ? 'Available' : 'Rented'}
-                      </span>
-                      <button type="button" onClick={() => { if (window.confirm(`Remove ${v.name}?`)) { removeVehicle(v.id); showToast('Vehicle removed.'); } }} className="ml-3 px-3 py-1.5 rounded-full border border-rose-200 text-rose-700 text-[10px] font-bold">Remove</button>
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
 
@@ -1592,6 +1644,79 @@ export const AdminDashboard: React.FC = () => {
                       Flush Platform Cache
                     </button>
                   </div>
+                </div>
+              </div>
+            )}
+
+            {partnerInventory && (
+              <div className="fixed inset-0 z-50 bg-stone-900/60 flex items-center justify-center p-4">
+                <div className="bg-white rounded-3xl p-6 max-w-3xl w-full max-h-[90vh] overflow-y-auto space-y-5">
+                  <div className="flex items-center justify-between gap-4">
+                    <div>
+                      <h3 className="font-serif-display text-2xl font-light text-stone-900">
+                        {partnerInventory.kind === 'hotels' ? 'Hotels' : 'Vehicles'} for {partnerInventory.partnerName}
+                      </h3>
+                      <p className="text-xs text-stone-500">
+                        {partnerInventory.items.length} {partnerInventory.kind === 'hotels' ? 'properties' : 'vehicles'} registered
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setPartnerInventory(null)}
+                      className="p-2 rounded-full hover:bg-stone-100 text-stone-600 cursor-pointer"
+                      aria-label="Close inventory"
+                    >
+                      <X className="w-5 h-5" />
+                    </button>
+                  </div>
+
+                  {loadingInventory ? (
+                    <p className="py-8 text-center text-sm text-stone-600">Loading inventory...</p>
+                  ) : partnerInventory.items.length === 0 ? (
+                    <div className="py-8 text-center bg-[#FAF8F5] rounded-2xl border border-dashed border-stone-300">
+                      <p className="text-sm text-stone-600">
+                        No {partnerInventory.kind === 'hotels' ? 'hotels' : 'vehicles'} registered for this partner.
+                      </p>
+                    </div>
+                  ) : partnerInventory.kind === 'hotels' ? (
+                    <div className="space-y-3">
+                      {partnerInventory.items.map((hotel) => (
+                        <div key={hotel.id} className="bg-[#FAF8F5] border border-stone-200 rounded-2xl p-4">
+                          <div className="flex items-center justify-between gap-4">
+                            <div>
+                              <h4 className="font-semibold text-stone-900">{hotel.name}</h4>
+                              <p className="text-xs text-stone-600">
+                                {hotel.city || hotel.address || hotel.destinationName || 'Location not provided'}
+                              </p>
+                            </div>
+                            <span className="text-xs font-bold text-[#9D3373]">{hotel.status || 'ACTIVE'}</span>
+                          </div>
+                          <p className="text-xs text-stone-500 mt-2">
+                            {hotel.roomCount || 0} rooms • Rating {hotel.rating || 0} ({hotel.reviewCount || 0} reviews)
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {partnerInventory.items.map((vehicle) => (
+                        <div key={vehicle.id} className="bg-[#FAF8F5] border border-stone-200 rounded-2xl p-4">
+                          <div className="flex items-center justify-between gap-4">
+                            <div>
+                              <h4 className="font-semibold text-stone-900">{vehicle.name}</h4>
+                              <p className="text-xs text-stone-600">
+                                {vehicle.type || 'Vehicle'} • {vehicle.registrationNumber || 'Registration not provided'}
+                              </p>
+                            </div>
+                            <span className="text-xs font-bold text-[#9D3373]">{vehicle.rentalStatus || 'AVAILABLE'}</span>
+                          </div>
+                          <p className="text-xs text-stone-500 mt-2">
+                            {vehicle.seats || 0} seats • ₹{(vehicle.dailyRate || 0).toLocaleString()} / day
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
             )}

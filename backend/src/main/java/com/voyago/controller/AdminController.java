@@ -63,6 +63,26 @@ public class AdminController {
         return ResponseEntity.ok(adminService.updateSettings(settings));
     }
 
+    @GetMapping("/hotel-partners")
+    public ResponseEntity<List<Map<String, Object>>> getHotelPartners() {
+        return ResponseEntity.ok(adminService.getHotelPartners());
+    }
+
+    @GetMapping("/vehicle-partners")
+    public ResponseEntity<List<Map<String, Object>>> getVehiclePartners() {
+        return ResponseEntity.ok(adminService.getVehiclePartners());
+    }
+
+    @GetMapping("/hotel-partners/{partnerId}/hotels")
+    public ResponseEntity<List<Map<String, Object>>> getHotelsByPartnerId(@PathVariable String partnerId) {
+        return ResponseEntity.ok(adminService.getHotelsByPartnerId(partnerId));
+    }
+
+    @GetMapping("/vehicle-partners/{partnerId}/vehicles")
+    public ResponseEntity<List<Map<String, Object>>> getVehiclesByPartnerId(@PathVariable String partnerId) {
+        return ResponseEntity.ok(adminService.getVehiclesByPartnerId(partnerId));
+    }
+
     private Map<String, Object> safeUser(User user) {
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("id", user.getId());
