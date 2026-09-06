@@ -225,6 +225,7 @@ export interface NotificationItem {
 
 export interface SavedItem {
   id: string;
+  userId?: string;
   type: 'DESTINATION' | 'HOTEL' | 'VEHICLE' | 'PLACE';
   itemId: string;
   title: string;

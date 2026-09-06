@@ -11,7 +11,9 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/admin")
@@ -27,8 +29,10 @@ public class AdminController {
     }
 
     @GetMapping("/users")
-    public ResponseEntity<List<User>> getUsers() {
-        return ResponseEntity.ok(adminService.getAllUsers());
+    public ResponseEntity<List<Map<String, Object>>> getUsers() {
+        return ResponseEntity.ok(adminService.getAllUsers().stream()
+                .map(this::safeUser)
+                .collect(Collectors.toList()));
     }
 
     @PatchMapping("/users/{id}/status")
@@ -57,5 +61,19 @@ public class AdminController {
     @PutMapping("/settings")
     public ResponseEntity<PlatformSettings> updateSettings(@RequestBody PlatformSettings settings) {
         return ResponseEntity.ok(adminService.updateSettings(settings));
+    }
+
+    private Map<String, Object> safeUser(User user) {
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("id", user.getId());
+        result.put("name", user.getName());
+        result.put("email", user.getEmail());
+        result.put("role", user.getRole());
+        result.put("phone", user.getPhone());
+        result.put("partnerBusinessName", user.getPartnerBusinessName());
+        result.put("partnerStatus", user.getPartnerStatus());
+        result.put("createdAt", user.getCreatedAt());
+        result.put("isActive", user.isActive());
+        return result;
     }
 }

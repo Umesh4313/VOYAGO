@@ -3,7 +3,13 @@ import { ArrowRight } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 
 export const PartnerBanners: React.FC = () => {
-  const { switchRole } = useApp();
+  const { setAuthRoleToLogin, setAuthModalInitialTab, setIsAuthModalOpen } = useApp();
+
+  const openPartnerLogin = (role: 'HOTEL_PARTNER' | 'VEHICLE_PARTNER') => {
+    setAuthRoleToLogin(role);
+    setAuthModalInitialTab('login');
+    setIsAuthModalOpen(true);
+  };
 
   return (
     <section className="py-16 bg-[#FAF8F5] border-b border-stone-200/80">
@@ -26,7 +32,7 @@ export const PartnerBanners: React.FC = () => {
 
             <div className="relative z-10">
               <button
-                onClick={() => switchRole('HOTEL_PARTNER')}
+                onClick={() => openPartnerLogin('HOTEL_PARTNER')}
                 className="inline-flex items-center gap-2 px-6 py-3 rounded-full bg-[#9D3373] text-white hover:bg-[#862960] text-xs uppercase tracking-[0.15em] font-bold transition-all hover:gap-3 cursor-pointer shadow-xs"
                 id="cta-become-hotel-partner"
               >
@@ -52,7 +58,7 @@ export const PartnerBanners: React.FC = () => {
 
             <div className="relative z-10">
               <button
-                onClick={() => switchRole('VEHICLE_PARTNER')}
+                onClick={() => openPartnerLogin('VEHICLE_PARTNER')}
                 className="inline-flex items-center gap-2 px-6 py-3 rounded-full bg-[#9D3373] text-white hover:bg-[#862960] text-xs uppercase tracking-[0.15em] font-bold transition-all hover:gap-3 cursor-pointer shadow-xs"
                 id="cta-become-rental-partner"
               >

@@ -107,31 +107,29 @@ Open your browser and navigate to:
 http://localhost:3000
 ```
 
-## ✅ Step 7: Login with Default Admin Account
+## ✅ Step 7: Create an Account or Sign In
 
-Use these credentials to login:
-- **Email**: `admin@voyago.com`
-- **Password**: `admin123`
-
-Or create a new customer account by clicking "Sign Up".
+Use **Sign Up** to create a customer, hotel partner, or vehicle partner account.
+Administrative and seeded development accounts are private and must be provisioned
+outside the client-facing application.
 
 ## 🎉 You're All Set!
 
 Your VOYAGO application is now running with:
 - ✅ Frontend on `http://localhost:3000`
-- ✅ Backend API on `http://localhost:8080/api`
+- ✅ Backend API on `http://localhost:8001/api`
 - ✅ MongoDB on `mongodb://localhost:27017/voyago`
 
 ## 🔍 Verify Everything is Working
 
-1. **Test Backend**: Open http://localhost:8080/api/destinations
+1. **Test Backend**: Open http://localhost:8001/api/destinations
    - Should return JSON with destinations list
 
 2. **Test Frontend**: Open http://localhost:3000
    - Should see the VOYAGO homepage
 
-3. **Test Login**: Login with admin credentials
-   - Should redirect to dashboard after successful login
+3. **Test Login**: Create an account and sign in
+   - Should redirect to the dashboard after successful login
 
 ## 🛑 Stopping the Application
 
@@ -230,3 +228,9 @@ Start making changes:
 - Changes will be reflected after saving (frontend) or restarting (backend)
 
 Happy coding! 🎉
+
+## Account access
+
+New users can create customer accounts through the sign-up form. Administrator
+and partner accounts must be provisioned privately by the platform owner; no
+development credentials are exposed in this guide or in the client application.

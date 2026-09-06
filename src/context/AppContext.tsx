@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import {
   User,
   UserRole,
@@ -25,17 +25,21 @@ import {
   HOTELS,
   VEHICLES,
   TOURIST_PLACES,
-  INITIAL_BOOKINGS,
   INITIAL_AUDIT_LOGS,
 } from '../data/mockData';
+import authService from '../services/authService';
+import bookingService from '../services/bookingService';
+import adminService from '../services/adminService';
 
 export type AppViewType = 'home' | 'customer' | 'my-trips' | 'hotel-partner' | 'vehicle-partner' | 'admin';
 
 interface AppContextType {
   currentUser: User;
   setCurrentUser: (user: User) => void;
-  switchRole: (role: UserRole) => void;
+  beginUserSession: (user: User, isNewRegistration?: boolean) => void;
+  logout: () => void;
   users: User[];
+  refreshUsers: () => Promise<void>;
   toggleUserStatus: (userId: string) => void;
   updatePartnerStatus: (userId: string, status: PartnerStatus) => void;
 
@@ -67,7 +71,8 @@ interface AppContextType {
     endDate?: string,
     travelers?: number,
     budgetCategory?: 'Budget' | 'Moderate' | 'Luxury',
-    vehiclePref?: 'ANY' | 'CAR' | 'BIKE' | 'NONE'
+    vehiclePref?: 'ANY' | 'CAR' | 'BIKE' | 'NONE',
+    openPlanner?: boolean
   ) => void;
   isPlannerOpen: boolean;
   setIsPlannerOpen: (open: boolean) => void;
@@ -134,6 +139,12 @@ interface AppContextType {
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 const LOCAL_STORAGE_PREFIX = 'voyago_';
+const GUEST_USER: User = {
+  id: 'guest',
+  name: 'Guest',
+  email: '',
+  role: 'CUSTOMER',
+};
 
 const safeGetItem = <T,>(key: string, fallback: T): T => {
   try {
@@ -149,7 +160,7 @@ const safeGetItem = <T,>(key: string, fallback: T): T => {
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   // 1. Current User & Users list
   const [currentUser, setCurrentUser] = useState<User>(() => {
-    return safeGetItem<User>(`${LOCAL_STORAGE_PREFIX}user`, INITIAL_USERS[0]);
+    return authService.isAuthenticated() ? (authService.getStoredUser() || GUEST_USER) : GUEST_USER;
   });
 
   const [users, setUsers] = useState<User[]>(() => {
@@ -229,7 +240,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   });
 
   const [bookings, setBookings] = useState<Booking[]>(() => {
-    return safeGetItem<Booking[]>(`${LOCAL_STORAGE_PREFIX}bookings`, INITIAL_BOOKINGS);
+    return [];
   });
 
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>(() => {
@@ -237,26 +248,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   });
 
   const [notifications, setNotifications] = useState<NotificationItem[]>(() => {
-    const fallback = [
-      {
-        id: 'nt-1',
-        title: 'Welcome to VOYAGO',
-        message: 'Plan your next journey with rule-based recommendations, seat selection, and instant bookings.',
-        timestamp: new Date().toISOString(),
-        isRead: false,
-        type: 'SYSTEM' as const,
-      },
-      {
-        id: 'nt-2',
-        title: 'Trip Confirmation',
-        message: 'Your recent booking for Goa is confirmed. Voucher ready for download.',
-        timestamp: new Date(Date.now() - 3600000 * 4).toISOString(),
-        isRead: false,
-        type: 'BOOKING' as const,
-      },
-    ];
-    return safeGetItem<NotificationItem[]>(`${LOCAL_STORAGE_PREFIX}notifs`, fallback);
+    return [];
   });
+  const [notificationStorageUser, setNotificationStorageUser] = useState<string | null>(null);
 
   const [savedItems, setSavedItems] = useState<SavedItem[]>(() => {
     return safeGetItem<SavedItem[]>(`${LOCAL_STORAGE_PREFIX}saved`, []);
@@ -277,6 +271,32 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     ];
     return safeGetItem<MaintenanceRecord[]>(`${LOCAL_STORAGE_PREFIX}maintenance`, fallback);
   });
+
+  const beginUserSession = (user: User, isNewRegistration = false) => {
+    if (isNewRegistration) {
+      localStorage.removeItem(`${LOCAL_STORAGE_PREFIX}notifs_${user.id}`);
+      localStorage.removeItem(`${LOCAL_STORAGE_PREFIX}saved_${user.id}`);
+      setNotifications([]);
+      setBookings([]);
+      setSavedItems((previousItems) => previousItems.filter((item) => item.userId !== user.id));
+    }
+    setUsers((previousUsers) => (
+      previousUsers.some((existingUser) => existingUser.id === user.id)
+        ? previousUsers.map((existingUser) => existingUser.id === user.id ? { ...existingUser, ...user } : existingUser)
+        : [...previousUsers, {
+            ...user,
+            partnerStatus: user.role.endsWith('_PARTNER') ? 'PENDING' : undefined,
+            isActive: true,
+            createdAt: user.createdAt || new Date().toISOString(),
+          }]
+    ));
+    setCurrentUser(user);
+  };
+
+  const refreshUsers = useCallback(async () => {
+    const remoteUsers = await adminService.getUsers();
+    setUsers(remoteUsers);
+  }, []);
 
   // 3. Current Trip Draft
   const [isPlannerOpen, setIsPlannerOpen] = useState(false);
@@ -328,16 +348,45 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, [touristPlaces]);
 
   useEffect(() => {
-    localStorage.setItem(`${LOCAL_STORAGE_PREFIX}bookings`, JSON.stringify(bookings));
-  }, [bookings]);
+    if (!authService.isAuthenticated() || currentUser.id === GUEST_USER.id) {
+      setBookings([]);
+      return;
+    }
+    let isCurrentUser = true;
+    setBookings([]);
+    bookingService.getMyBookings(currentUser.id)
+      .then((userBookings) => {
+        if (isCurrentUser) setBookings(userBookings);
+      })
+      .catch((error) => console.error('Failed to load bookings from the database.', error));
+    return () => {
+      isCurrentUser = false;
+    };
+  }, [currentUser.id]);
 
   useEffect(() => {
     localStorage.setItem(`${LOCAL_STORAGE_PREFIX}logs`, JSON.stringify(auditLogs));
   }, [auditLogs]);
 
   useEffect(() => {
-    localStorage.setItem(`${LOCAL_STORAGE_PREFIX}notifs`, JSON.stringify(notifications));
-  }, [notifications]);
+    const storageKey = `${LOCAL_STORAGE_PREFIX}notifs_${currentUser.id}`;
+    setNotificationStorageUser(null);
+    setNotifications(
+      currentUser.id === GUEST_USER.id
+        ? []
+        : safeGetItem<NotificationItem[]>(storageKey, []).filter((notification) => notification.userId === currentUser.id)
+    );
+    setNotificationStorageUser(currentUser.id);
+    localStorage.removeItem(`${LOCAL_STORAGE_PREFIX}notifs`);
+  }, [currentUser.id]);
+
+  useEffect(() => {
+    if (notificationStorageUser !== currentUser.id || currentUser.id === GUEST_USER.id) return;
+    localStorage.setItem(
+      `${LOCAL_STORAGE_PREFIX}notifs_${currentUser.id}`,
+      JSON.stringify(notifications.filter((notification) => notification.userId === currentUser.id))
+    );
+  }, [notifications, currentUser.id, notificationStorageUser]);
 
   useEffect(() => {
     localStorage.setItem(`${LOCAL_STORAGE_PREFIX}saved`, JSON.stringify(savedItems));
@@ -364,6 +413,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const addNotification = (notif: Omit<NotificationItem, 'id' | 'timestamp' | 'isRead'>) => {
     const newNotif: NotificationItem = {
       ...notif,
+      userId: notif.userId || (currentUser.id !== GUEST_USER.id ? currentUser.id : undefined),
       id: `nt-${Date.now()}`,
       timestamp: new Date().toISOString(),
       isRead: false,
@@ -372,22 +422,27 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const markNotificationRead = (id: string) => {
-    setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, isRead: true } : n)));
+    setNotifications((prev) => prev.map((n) => (
+      n.id === id && n.userId === currentUser.id ? { ...n, isRead: true } : n
+    )));
   };
 
   const markAllNotificationsRead = () => {
-    setNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })));
+    setNotifications((prev) => prev.map((n) => (
+      n.userId === currentUser.id ? { ...n, isRead: true } : n
+    )));
   };
 
   const toggleSaveItem = (item: Omit<SavedItem, 'id' | 'savedAt'>) => {
     setSavedItems((prev) => {
-      const exists = prev.find((s) => s.itemId === item.itemId);
+      const exists = prev.find((s) => s.itemId === item.itemId && s.userId === currentUser.id);
       if (exists) {
-        return prev.filter((s) => s.itemId !== item.itemId);
+        return prev.filter((s) => s.id !== exists.id);
       } else {
         return [
           {
             ...item,
+            userId: currentUser.id,
             id: `save-${Date.now()}`,
             savedAt: new Date().toISOString(),
           },
@@ -398,7 +453,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const isItemSaved = (itemId: string) => {
-    return savedItems.some((s) => s.itemId === itemId);
+    return savedItems.some((s) => s.itemId === itemId && s.userId === currentUser.id);
   };
 
   const toggleUserStatus = (userId: string) => {
@@ -420,26 +475,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
   };
 
-  const switchRole = (role: UserRole) => {
-    const targetUser = users.find((u) => u.role === role) || INITIAL_USERS.find((u) => u.role === role) || {
-      id: `usr-${role.toLowerCase()}`,
-      name: `${role.replace('_', ' ')} Account`,
-      email: `${role.toLowerCase()}@voyago.com`,
-      role,
-    };
-    setCurrentUser(targetUser);
 
-    if (role === 'HOTEL_PARTNER') {
-      setActiveView('hotel-partner');
-    } else if (role === 'VEHICLE_PARTNER') {
-      setActiveView('vehicle-partner');
-    } else if (role === 'ADMIN') {
-      setActiveView('admin');
-    } else {
-      setActiveView('customer');
-    }
-
-    addAuditLog('ROLE_SWITCH', 'User', targetUser.id, `Switched session to role ${role}`);
+  const logout = () => {
+    authService.logout();
+    setCurrentUser(GUEST_USER);
+    setActiveView('home');
+    setIsAuthModalOpen(false);
   };
 
   const updateDraft = (updates: Partial<TripDraft>) => {
@@ -452,7 +493,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     endDate: string = '2026-10-19',
     travelers: number = 2,
     budgetCategory: 'Budget' | 'Moderate' | 'Luxury' = 'Moderate',
-    vehiclePref: 'ANY' | 'CAR' | 'BIKE' | 'NONE' = 'ANY'
+    vehiclePref: 'ANY' | 'CAR' | 'BIKE' | 'NONE' = 'ANY',
+    openPlanner = true
   ) => {
     const dest = destinations.find((d) => d.id === destinationId) || destinations[0];
     
@@ -489,7 +531,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
 
     setPlannerStep(1);
-    setIsPlannerOpen(true);
+    if (openPlanner) {
+      setIsPlannerOpen(true);
+    }
   };
 
   // Pre-payment Availability Verification (FR-AVL-01 & FR-VEH-03)
@@ -556,6 +600,35 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         success: false,
         error: 'Payment was declined by the bank or gateway timeout occurred. Please retry with UPI or an alternate card.',
       };
+    }
+
+    try {
+      const booking = await bookingService.createBooking(
+        bookingService.buildRequestFromDraft(
+          currentDraft,
+          currentUser.id,
+          currentUser.name,
+          currentUser.email,
+          currentUser.phone || '',
+          method
+        )
+      );
+      setBookings((prev) => [booking, ...prev.filter((item) => item.id !== booking.id)]);
+      addAuditLog(
+        'BOOKING_CONFIRMED',
+        'Booking',
+        booking.id,
+        `Confirmed booking for ${currentUser.name} (${currentDraft.destinationName}). Total: ₹${booking.totalCost.toLocaleString()}`
+      );
+      addNotification({
+        title: 'Booking Confirmed!',
+        message: `Your trip to ${currentDraft.destinationName} (${booking.id}) is confirmed. Total: ₹${booking.totalCost.toLocaleString()}`,
+        type: 'BOOKING',
+      });
+      return { success: true, booking };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Booking could not be saved. Please try again.';
+      return { success: false, error: message };
     }
 
     // Calculate total
@@ -890,6 +963,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const addVehicle = (vehicleData: Omit<Vehicle, 'id'>) => {
     const newVehicle: Vehicle = {
       ...vehicleData,
+      partnerId: currentUser.id,
       id: `veh-${Date.now()}`,
       rentalStatus: 'AVAILABLE',
       isAvailable: true,
@@ -982,8 +1056,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       value={{
         currentUser,
         setCurrentUser,
-        switchRole,
+        beginUserSession,
+        logout,
         users,
+        refreshUsers,
         toggleUserStatus,
         updatePartnerStatus,
         isAuthModalOpen,

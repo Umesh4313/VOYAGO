@@ -161,7 +161,7 @@ Comprehensive documentation created:
 // Frontend: src/services/authService.ts
 const response = await apiClient.post('/auth/login', {
   email: 'user@example.com',
-  password: 'password123'
+  password: '<user-provided-password>'
 });
 
 // Backend: AuthController.java
@@ -201,7 +201,7 @@ const destinations = await apiClient.get('/destinations');
 ### Step 2: Test Backend Directly
 ```powershell
 # Test destinations endpoint
-curl http://localhost:8080/api/destinations
+curl http://localhost:8001/api/destinations
 
 # Should return JSON array of destinations
 ```
@@ -210,10 +210,10 @@ curl http://localhost:8080/api/destinations
 1. Open browser to `http://localhost:3000`
 2. Open Developer Tools (F12) → Network tab
 3. Click on any destination or hotel
-4. Verify API calls to `http://localhost:8080/api/*` are successful (status 200)
+4. Verify API calls to `http://localhost:8001/api/*` are successful (status 200)
 
 ### Step 4: Test Authentication
-1. Register a new account or login with admin credentials
+1. Register a new account or use a privately provisioned account
 2. Check Network tab for `/api/auth/login` request
 3. Verify response includes `token` field
 4. Check Application tab → Local Storage → `voyago_token` exists
@@ -222,7 +222,7 @@ curl http://localhost:8080/api/destinations
 ## ✅ Connection Checklist
 
 - [x] MongoDB running on port 27017
-- [x] Backend running on port 8080
+- [x] Backend running on port 8001
 - [x] Frontend running on port 3000
 - [x] CORS configured to allow frontend origin
 - [x] Environment variable `VITE_API_URL` set correctly
@@ -245,7 +245,7 @@ Your VOYAGO application is now fully connected:
 
 If you encounter connection issues:
 
-1. **Check backend is running**: Visit http://localhost:8080/api/destinations
+1. **Check backend is running**: Visit http://localhost:8001/api/destinations
 2. **Check frontend environment**: Ensure `.env` file has correct `VITE_API_URL`
 3. **Check browser console**: Look for CORS errors or network failures
 4. **Check backend logs**: Look for errors in PowerShell window

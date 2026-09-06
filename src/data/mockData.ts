@@ -29,14 +29,6 @@ export const INITIAL_USERS: User[] = [
     phone: '+91 99234 11223',
     avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150&auto=format&fit=crop&q=80',
   },
-  {
-    id: 'usr-admin',
-    name: 'Devika Nair',
-    email: 'admin@voyago.com',
-    role: 'ADMIN',
-    phone: '+91 91122 33445',
-    avatar: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150&auto=format&fit=crop&q=80',
-  },
 ];
 
 export const DESTINATIONS: Destination[] = [
@@ -1108,7 +1100,7 @@ export const INITIAL_BOOKINGS: Booking[] = [
 export const INITIAL_AUDIT_LOGS: AuditLog[] = [
   {
     id: 'log-1',
-    actor: 'admin@voyago.com',
+    actor: 'System Administrator',
     role: 'ADMIN',
     action: 'DESTINATION_ADDED',
     entity: 'Destination',

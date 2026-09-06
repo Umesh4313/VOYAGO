@@ -1,8 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { Plane, ArrowLeft, ArrowRight, ShieldCheck, CheckCircle2 } from 'lucide-react';
+import { Plane, ArrowLeft, ArrowRight, CheckCircle2, Eye, EyeOff } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { UserRole } from '../../types';
-import { INITIAL_USERS } from '../../data/mockData';
 import authService from '../../services/authService';
 import axios from 'axios';
 
@@ -12,8 +11,9 @@ export const AuthModal: React.FC = () => {
     setIsAuthModalOpen,
     authModalInitialTab,
     authRoleToLogin,
-    setCurrentUser,
+    beginUserSession,
     setActiveView,
+    setCustomerActiveTab,
     addAuditLog,
   } = useApp();
 
@@ -22,11 +22,15 @@ export const AuthModal: React.FC = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
+  const [partnerBusinessName, setPartnerBusinessName] = useState('');
   const [rememberMe, setRememberMe] = useState(true);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [resetLink, setResetLink] = useState<string | null>(null);
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const resetToken = new URLSearchParams(window.location.search).get('resetToken');
   const [authMode, setAuthMode] = useState<'login' | 'signup' | 'reset'>(resetToken ? 'reset' : authModalInitialTab);
 
@@ -37,30 +41,22 @@ export const AuthModal: React.FC = () => {
       setSelectedRole(authRoleToLogin || 'CUSTOMER');
       setMessage(null);
       setResetLink(null);
+      setPartnerBusinessName('');
     }
   }, [isAuthModalOpen, authModalInitialTab, authRoleToLogin, resetToken]);
 
   if (!isAuthModalOpen) return null;
 
-  const handleDemoFill = (role: UserRole) => {
-    const demoCredentials: Record<UserRole, { email: string; password: string }> = {
-      CUSTOMER: { email: 'customer@gmail.com', password: 'password123' },
-      ADMIN: { email: 'admin@gmail.com', password: 'admin123' },
-      HOTEL_PARTNER: { email: 'hotel@gmail.com', password: 'hotel123' },
-      VEHICLE_PARTNER: { email: 'vehicle@gmail.com', password: 'vehicle123' },
-    };
-    const matched = INITIAL_USERS.find((u) => u.role === role);
-    if (matched) {
-      setSelectedRole(role);
-      setEmail(demoCredentials[role].email);
-      setName(matched.name);
-      setPassword(demoCredentials[role].password);
-    }
-  };
-
   const getErrorMessage = (error: unknown) => {
-    if (axios.isAxiosError<{ error?: string }>(error)) {
-      return error.response?.data?.error || 'Unable to complete this request.';
+    if (axios.isAxiosError<Record<string, string> | string>(error)) {
+      if (!error.response) {
+        return 'Unable to reach Voyago right now. Please check that the server is running and try again.';
+      }
+      const responseData = error.response.data;
+      if (typeof responseData === 'string') return responseData;
+      const messages = Object.values(responseData || {}).filter(Boolean);
+      if (messages.length > 0) return messages.join(' ');
+      return `Request failed (${error.response.status}). Please try again.`;
     }
     return error instanceof Error ? error.message : 'Unable to complete this request.';
   };
@@ -94,12 +90,28 @@ export const AuthModal: React.FC = () => {
       return;
     }
 
-    const userEmail = email.trim() || `${selectedRole.toLowerCase()}@voyago.com`;
-    const userName = name.trim() || (selectedRole === 'CUSTOMER' ? 'Arjun Sharma' : `${selectedRole.replace('_', ' ')} Manager`);
+    const userEmail = email.trim();
+    const userName = name.trim();
+    if (activeTab === 'login' && !userEmail) {
+      setMessage({ type: 'error', text: 'Enter the email address linked to your account.' });
+      return;
+    }
+    if (activeTab === 'signup' && (!userName || !userEmail)) {
+      setMessage({ type: 'error', text: 'Enter your full name and email address to create an account.' });
+      return;
+    }
     try {
       const response = activeTab === 'login'
         ? await authService.login({ email: userEmail, password })
-        : await authService.register({ name: userName, email: userEmail, password, role: selectedRole });
+        : await authService.register({
+            name: userName,
+            email: userEmail,
+            password,
+            role: selectedRole,
+            partnerBusinessName: activeTab === 'signup' && selectedRole !== 'CUSTOMER'
+              ? partnerBusinessName.trim()
+              : undefined,
+          });
       if (activeTab === 'login' && response.role !== selectedRole) {
         authService.logout();
         setMessage({ type: 'error', text: `This account is for ${response.role.replace('_', ' ').toLowerCase()} access.` });
@@ -111,16 +123,36 @@ export const AuthModal: React.FC = () => {
         email: response.email,
         role: response.role as UserRole,
       };
-      setCurrentUser(authenticatedUser);
+      beginUserSession(authenticatedUser, activeTab === 'signup');
+      setCustomerActiveTab('dashboard');
+      setActiveView(
+        response.role === 'HOTEL_PARTNER'
+          ? 'hotel-partner'
+          : response.role === 'VEHICLE_PARTNER'
+            ? 'vehicle-partner'
+            : response.role === 'ADMIN'
+              ? 'admin'
+              : 'customer'
+      );
       addAuditLog('USER_AUTHENTICATED', 'User', authenticatedUser.id, `User logged in with role ${authenticatedUser.role}`);
       setMessage({ type: 'success', text: `Welcome back, ${response.name}!` });
       setTimeout(() => {
         setIsAuthModalOpen(false);
         setMessage(null);
-        setActiveView(response.role === 'HOTEL_PARTNER' ? 'hotel-partner' : response.role === 'VEHICLE_PARTNER' ? 'vehicle-partner' : response.role === 'ADMIN' ? 'admin' : 'customer');
       }, 600);
     } catch (error) {
-      setMessage({ type: 'error', text: getErrorMessage(error) });
+      const errorMessage = getErrorMessage(error);
+      if (activeTab === 'login' && errorMessage.toLowerCase().includes('no account found')) {
+        setActiveTab('signup');
+        setAuthMode('signup');
+        setPassword('');
+        setMessage({
+          type: 'error',
+          text: 'No account was found for this email. Please complete the sign-up form to create your account.',
+        });
+        return;
+      }
+      setMessage({ type: 'error', text: errorMessage });
     }
   };
 
@@ -132,7 +164,7 @@ export const AuthModal: React.FC = () => {
     try {
       const response = await authService.requestPasswordReset(email.trim());
       setResetLink(response.resetUrl || null);
-      setMessage({ type: 'success', text: `${response.message} Open the demo link below to choose a new password.` });
+      setMessage({ type: 'success', text: `${response.message} Open the link below to choose a new password.` });
     } catch (error) {
       setMessage({ type: 'error', text: getErrorMessage(error) });
     }
@@ -258,70 +290,26 @@ export const AuthModal: React.FC = () => {
               </button>
             </div>}
 
-            {/* Development-only shortcuts; production uses real credentials. */}
-            {authMode !== 'reset' && import.meta.env.DEV && <div className="mb-6 bg-[#FAF8F5] p-3.5 rounded-2xl border border-stone-200">
-              <p className="text-[10px] font-bold text-[#9D3373] uppercase tracking-widest mb-2 flex items-center gap-1.5">
-                <ShieldCheck className="w-3.5 h-3.5 text-[#9D3373]" />
-                <span>Instant Demo Login (Choose Role)</span>
-              </p>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 text-xs">
-                <button
-                  type="button"
-                  onClick={() => handleDemoFill('CUSTOMER')}
-                  className={`py-1.5 px-2 rounded-lg font-medium transition-all text-center truncate cursor-pointer ${
-                    selectedRole === 'CUSTOMER'
-                      ? 'bg-[#9D3373] text-white font-bold shadow-xs'
-                      : 'bg-white border border-stone-200 text-stone-700 hover:border-[#9D3373]/50'
-                  }`}
-                >
-                  Customer
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleDemoFill('HOTEL_PARTNER')}
-                  className={`py-1.5 px-2 rounded-lg font-medium transition-all text-center truncate cursor-pointer ${
-                    selectedRole === 'HOTEL_PARTNER'
-                      ? 'bg-[#9D3373] text-white font-bold shadow-xs'
-                      : 'bg-white border border-stone-200 text-stone-700 hover:border-[#9D3373]/50'
-                  }`}
-                >
-                  Hotel Partner
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleDemoFill('VEHICLE_PARTNER')}
-                  className={`py-1.5 px-2 rounded-lg font-medium transition-all text-center truncate cursor-pointer ${
-                    selectedRole === 'VEHICLE_PARTNER'
-                      ? 'bg-[#9D3373] text-white font-bold shadow-xs'
-                      : 'bg-white border border-stone-200 text-stone-700 hover:border-[#9D3373]/50'
-                  }`}
-                >
-                  Ride Partner
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleDemoFill('ADMIN')}
-                  className={`py-1.5 px-2 rounded-lg font-medium transition-all text-center truncate cursor-pointer ${
-                    selectedRole === 'ADMIN'
-                      ? 'bg-[#9D3373] text-white font-bold shadow-xs'
-                      : 'bg-white border border-stone-200 text-stone-700 hover:border-[#9D3373]/50'
-                  }`}
-                >
-                  Admin
-                </button>
-              </div>
-            </div>}
-
             {/* Form */}
             {authMode === 'reset' ? (
               <form onSubmit={handleAuthSubmit} className="space-y-4">
                 <div>
                   <label className="block text-[11px] font-bold text-stone-700 uppercase tracking-wider mb-1">New password</label>
-                  <input type="password" required minLength={8} value={newPassword} onChange={(e) => setNewPassword(e.target.value)} placeholder="At least 8 characters" className="w-full px-4 py-2.5 rounded-xl border border-stone-300 bg-white text-stone-900 text-sm focus:outline-none focus:border-[#9D3373] focus:ring-1 focus:ring-[#9D3373]" />
+                  <div className="relative">
+                    <input type={showNewPassword ? 'text' : 'password'} required minLength={8} value={newPassword} onChange={(e) => setNewPassword(e.target.value)} placeholder="At least 8 characters" className="w-full px-4 pr-11 py-2.5 rounded-xl border border-stone-300 bg-white text-stone-900 text-sm focus:outline-none focus:border-[#9D3373] focus:ring-1 focus:ring-[#9D3373]" />
+                    <button type="button" onClick={() => setShowNewPassword((visible) => !visible)} aria-label={showNewPassword ? 'Hide new password' : 'Show new password'} className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-400 hover:text-[#9D3373]">
+                      {showNewPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
                 </div>
                 <div>
                   <label className="block text-[11px] font-bold text-stone-700 uppercase tracking-wider mb-1">Confirm new password</label>
-                  <input type="password" required minLength={8} value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} placeholder="Repeat your new password" className="w-full px-4 py-2.5 rounded-xl border border-stone-300 bg-white text-stone-900 text-sm focus:outline-none focus:border-[#9D3373] focus:ring-1 focus:ring-[#9D3373]" />
+                  <div className="relative">
+                    <input type={showConfirmPassword ? 'text' : 'password'} required minLength={8} value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} placeholder="Repeat your new password" className="w-full px-4 pr-11 py-2.5 rounded-xl border border-stone-300 bg-white text-stone-900 text-sm focus:outline-none focus:border-[#9D3373] focus:ring-1 focus:ring-[#9D3373]" />
+                    <button type="button" onClick={() => setShowConfirmPassword((visible) => !visible)} aria-label={showConfirmPassword ? 'Hide confirmed password' : 'Show confirmed password'} className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-400 hover:text-[#9D3373]">
+                      {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
                 </div>
                 {message && (
                   <div className={`p-3 rounded-xl text-xs flex items-center gap-2 ${message.type === 'success' ? 'bg-[#9D3373]/10 text-[#9D3373] border border-[#9D3373]/30' : 'bg-rose-50 text-rose-700 border border-rose-200'}`}>
@@ -333,6 +321,24 @@ export const AuthModal: React.FC = () => {
                 </button>
               </form>
             ) : <form onSubmit={handleAuthSubmit} className="space-y-4">
+              {activeTab === 'login' && (
+                <div>
+                  <label htmlFor="login-role" className="block text-[11px] font-bold text-stone-700 uppercase tracking-wider mb-1">
+                    Login as
+                  </label>
+                  <select
+                    id="login-role"
+                    value={selectedRole}
+                    onChange={(e) => setSelectedRole(e.target.value as UserRole)}
+                    className="w-full px-4 py-2.5 rounded-xl border border-stone-300 bg-white text-stone-900 text-sm focus:outline-none focus:border-[#9D3373] focus:ring-1 focus:ring-[#9D3373]"
+                  >
+                    <option value="CUSTOMER">Customer</option>
+                    <option value="ADMIN">Admin</option>
+                    <option value="HOTEL_PARTNER">Hotel Partner</option>
+                    <option value="VEHICLE_PARTNER">Vehicle Partner</option>
+                  </select>
+                </div>
+              )}
               {activeTab === 'signup' && (
                 <div>
                   <label className="block text-[11px] font-bold text-stone-700 uppercase tracking-wider mb-1">
@@ -346,6 +352,39 @@ export const AuthModal: React.FC = () => {
                     placeholder="Arjun Sharma"
                     className="w-full px-4 py-2.5 rounded-xl border border-stone-300 bg-white text-stone-900 text-sm focus:outline-none focus:border-[#9D3373] focus:ring-1 focus:ring-[#9D3373]"
                   />
+                </div>
+              )}
+              {activeTab === 'signup' && selectedRole !== 'CUSTOMER' && (
+                <div>
+                  <label htmlFor="partner-business-name" className="block text-[11px] font-bold text-stone-700 uppercase tracking-wider mb-1">
+                    Business name
+                  </label>
+                  <input
+                    id="partner-business-name"
+                    type="text"
+                    required
+                    value={partnerBusinessName}
+                    onChange={(e) => setPartnerBusinessName(e.target.value)}
+                    placeholder="Your hotel or rental business"
+                    className="w-full px-4 py-2.5 rounded-xl border border-stone-300 bg-white text-stone-900 text-sm focus:outline-none focus:border-[#9D3373] focus:ring-1 focus:ring-[#9D3373]"
+                  />
+                </div>
+              )}
+              {activeTab === 'signup' && (
+                <div>
+                  <label htmlFor="signup-role" className="block text-[11px] font-bold text-stone-700 uppercase tracking-wider mb-1">
+                    Account type
+                  </label>
+                  <select
+                    id="signup-role"
+                    value={selectedRole}
+                    onChange={(e) => setSelectedRole(e.target.value as UserRole)}
+                    className="w-full px-4 py-2.5 rounded-xl border border-stone-300 bg-white text-stone-900 text-sm focus:outline-none focus:border-[#9D3373] focus:ring-1 focus:ring-[#9D3373]"
+                  >
+                    <option value="CUSTOMER">Customer</option>
+                    <option value="HOTEL_PARTNER">Hotel Partner</option>
+                    <option value="VEHICLE_PARTNER">Vehicle Partner</option>
+                  </select>
                 </div>
               )}
 
@@ -378,14 +417,19 @@ export const AuthModal: React.FC = () => {
                     </button>
                   )}
                 </div>
-                <input
-                  type="password"
-                  required
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="••••••••"
-                  className="w-full px-4 py-2.5 rounded-xl border border-stone-300 bg-white text-stone-900 text-sm focus:outline-none focus:border-[#9D3373] focus:ring-1 focus:ring-[#9D3373]"
-                />
+                <div className="relative">
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    required
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="••••••••"
+                    className="w-full px-4 pr-11 py-2.5 rounded-xl border border-stone-300 bg-white text-stone-900 text-sm focus:outline-none focus:border-[#9D3373] focus:ring-1 focus:ring-[#9D3373]"
+                  />
+                  <button type="button" onClick={() => setShowPassword((visible) => !visible)} aria-label={showPassword ? 'Hide password' : 'Show password'} className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-400 hover:text-[#9D3373]">
+                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
               </div>
 
               {activeTab === 'login' && (
@@ -428,7 +472,7 @@ export const AuthModal: React.FC = () => {
 
             {resetLink && (
               <a href={resetLink} className="mt-3 block rounded-xl bg-stone-100 p-3 text-xs font-semibold text-[#9D3373] break-all hover:underline">
-                Open demo reset link
+                Open reset link
               </a>
             )}
 
@@ -459,7 +503,7 @@ export const AuthModal: React.FC = () => {
           </div>
 
           <p className="text-[11px] text-stone-400 text-center mt-6 uppercase tracking-wider">
-            By continuing, you agree to Voyago's Terms of Service and Privacy Discretion.
+            By continuing, you agree to Voyago's Terms of Service and Privacy Policy.
           </p>
 
         </div>

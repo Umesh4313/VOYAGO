@@ -72,6 +72,7 @@ public class Booking {
     public static class BookingHotel {
         private String id;
         private String name;
+        private String roomId;
         private String roomType;
         private String roomName;
         private double pricePerNight;

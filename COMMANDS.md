@@ -147,8 +147,8 @@ db.destinations.countDocuments()
 // View all users
 db.users.find().pretty()
 
-// Find admin user
-db.users.findOne({ email: "admin@voyago.com" })
+// Find a privately provisioned administrator
+db.users.findOne({ role: "ADMIN" })
 
 // View all bookings
 db.bookings.find().pretty()
@@ -202,7 +202,7 @@ mongoimport --db voyago --collection users --file users.json
 curl http://localhost:8080/api/destinations
 
 # Test login
-$body = '{"email":"admin@voyago.com","password":"admin123"}'
+$body = '{"email":"<private-admin-email>","password":"<private-admin-password>"}'
 curl -X POST http://localhost:8080/api/auth/login `
   -H "Content-Type: application/json" `
   -d $body
@@ -227,8 +227,8 @@ Invoke-RestMethod -Uri "http://localhost:8080/api/destinations" -Method Get
 
 # Login
 $loginBody = @{
-    email = "admin@voyago.com"
-    password = "admin123"
+    email = "<private-admin-email>"
+    password = "<private-admin-password>"
 } | ConvertTo-Json
 
 $response = Invoke-RestMethod -Uri "http://localhost:8080/api/auth/login" `

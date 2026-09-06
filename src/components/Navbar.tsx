@@ -1,12 +1,11 @@
 import React, { useState } from 'react';
-import { ChevronDown, User as UserIcon, LogOut, Shield, Hotel, Car, Briefcase, Compass, CalendarCheck, Sparkles } from 'lucide-react';
+import { ChevronDown, LogOut, Shield, Hotel, Car, Briefcase, Compass, CalendarCheck, Sparkles } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { UserRole } from '../types';
 
 export const Navbar: React.FC = () => {
   const {
     currentUser,
-    switchRole,
     setIsAuthModalOpen,
     setAuthModalInitialTab,
     setAuthRoleToLogin,
@@ -19,7 +18,6 @@ export const Navbar: React.FC = () => {
   } = useApp();
 
   const [isBusinessDropdownOpen, setIsBusinessDropdownOpen] = useState(false);
-  const [isRoleDropdownOpen, setIsRoleDropdownOpen] = useState(false);
 
   const handleForBusinessClick = (role: UserRole) => {
     setIsBusinessDropdownOpen(false);
@@ -34,13 +32,6 @@ export const Navbar: React.FC = () => {
 
   const handleSearchTransport = () => {
     setAuthRoleToLogin('CUSTOMER');
-    setAuthModalInitialTab('login');
-    setIsAuthModalOpen(true);
-  };
-
-  const handleProtectedRoleAccess = (role: UserRole) => {
-    setIsRoleDropdownOpen(false);
-    setAuthRoleToLogin(role);
     setAuthModalInitialTab('login');
     setIsAuthModalOpen(true);
   };
@@ -255,96 +246,6 @@ export const Navbar: React.FC = () => {
 
         {/* Right Side Buttons - matching Screenshot 1 */}
         <div className="flex items-center gap-4">
-          {import.meta.env.DEV && <div className="relative">
-            <button
-              onClick={() => setIsRoleDropdownOpen(!isRoleDropdownOpen)}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-stone-100 hover:bg-stone-200/80 border border-stone-200 text-stone-800 transition-all text-xs"
-              id="role-indicator-badge"
-              title="Switch demo role"
-            >
-              <span className="w-2 h-2 rounded-full bg-[#9D3373]"></span>
-              <span className="font-semibold text-[11px] text-stone-800 uppercase tracking-wider">
-                {role.replace('_', ' ')}
-              </span>
-              <ChevronDown className="w-3 h-3 text-stone-500" />
-            </button>
-
-            {isRoleDropdownOpen && (
-              <div 
-                className="absolute right-0 mt-2 w-64 bg-white text-stone-900 rounded-2xl shadow-2xl py-2 border border-stone-200 z-50 animate-in fade-in"
-                onMouseLeave={() => setIsRoleDropdownOpen(false)}
-              >
-                <div className="px-4 py-2 border-b border-stone-100">
-                  <p className="text-[10px] text-[#9D3373] uppercase tracking-wider font-bold">Current Account</p>
-                  <p className="text-sm font-semibold text-stone-900 truncate">{currentUser?.name || 'User'}</p>
-                  <p className="text-xs text-stone-500 truncate">{currentUser?.email || ''}</p>
-                </div>
-
-                <div className="py-1">
-                  <p className="px-4 py-1 text-[10px] font-bold text-stone-400 uppercase tracking-widest">
-                    Switch Role (Demo)
-                  </p>
-                  <button
-                    onClick={() => {
-                      switchRole('CUSTOMER');
-                      setIsRoleDropdownOpen(false);
-                    }}
-                    className={`w-full text-left px-4 py-2 text-xs flex items-center justify-between hover:bg-stone-50 ${
-                      currentUser?.role === 'CUSTOMER' ? 'text-[#9D3373] font-semibold bg-[#9D3373]/5' : 'text-stone-700'
-                    }`}
-                  >
-                    <span className="flex items-center gap-2">
-                      <UserIcon className="w-3.5 h-3.5 text-[#9D3373]" /> Customer
-                    </span>
-                    {currentUser?.role === 'CUSTOMER' && <span className="text-[#9D3373] text-xs">✓</span>}
-                  </button>
-
-                  <button
-                    onClick={() => {
-                      handleProtectedRoleAccess('HOTEL_PARTNER');
-                    }}
-                    className={`w-full text-left px-4 py-2 text-xs flex items-center justify-between hover:bg-stone-50 ${
-                      currentUser?.role === 'HOTEL_PARTNER' ? 'text-[#9D3373] font-semibold bg-[#9D3373]/5' : 'text-stone-700'
-                    }`}
-                  >
-                    <span className="flex items-center gap-2">
-                      <Hotel className="w-3.5 h-3.5 text-[#9D3373]" /> Hotel Partner
-                    </span>
-                    {currentUser?.role === 'HOTEL_PARTNER' && <span className="text-[#9D3373] text-xs">✓</span>}
-                  </button>
-
-                  <button
-                    onClick={() => {
-                      handleProtectedRoleAccess('VEHICLE_PARTNER');
-                    }}
-                    className={`w-full text-left px-4 py-2 text-xs flex items-center justify-between hover:bg-stone-50 ${
-                      currentUser?.role === 'VEHICLE_PARTNER' ? 'text-[#9D3373] font-semibold bg-[#9D3373]/5' : 'text-stone-700'
-                    }`}
-                  >
-                    <span className="flex items-center gap-2">
-                      <Car className="w-3.5 h-3.5 text-[#9D3373]" /> Vehicle Partner
-                    </span>
-                    {currentUser?.role === 'VEHICLE_PARTNER' && <span className="text-[#9D3373] text-xs">✓</span>}
-                  </button>
-
-                  <button
-                    onClick={() => {
-                      handleProtectedRoleAccess('ADMIN');
-                    }}
-                    className={`w-full text-left px-4 py-2 text-xs flex items-center justify-between hover:bg-stone-50 ${
-                      currentUser?.role === 'ADMIN' ? 'text-[#9D3373] font-semibold bg-[#9D3373]/5' : 'text-stone-700'
-                    }`}
-                  >
-                    <span className="flex items-center gap-2">
-                      <Shield className="w-3.5 h-3.5 text-[#9D3373]" /> Super Admin
-                    </span>
-                    {currentUser?.role === 'ADMIN' && <span className="text-[#9D3373] text-xs">✓</span>}
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>}
-
           {/* "Sign in" link matching Screenshot 1 */}
           {!isDashboardView && <button
             onClick={() => {

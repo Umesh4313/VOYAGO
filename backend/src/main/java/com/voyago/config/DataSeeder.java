@@ -5,6 +5,7 @@ import com.voyago.repository.*;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.CommandLineRunner;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
 
@@ -12,7 +13,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Seeds MongoDB with initial demo data on application startup.
+ * Seeds MongoDB with initial catalog data on application startup.
  * Only runs if the respective collections are empty (idempotent).
  */
 @Slf4j
@@ -20,17 +21,22 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class DataSeeder implements CommandLineRunner {
 
-    private final UserRepository userRepository;
     private final DestinationRepository destinationRepository;
+    private final UserRepository userRepository;
     private final HotelRepository hotelRepository;
     private final VehicleRepository vehicleRepository;
     private final TravelOptionRepository travelOptionRepository;
     private final TouristPlaceRepository touristPlaceRepository;
     private final PasswordEncoder passwordEncoder;
 
+    @Value("${app.seed-development-accounts:false}")
+    private boolean seedDevelopmentAccounts;
+
     @Override
     public void run(String... args) {
-        seedUsers();
+        if (seedDevelopmentAccounts) {
+            seedDevelopmentAccounts();
+        }
         seedDestinations();
         seedHotels();
         seedVehicles();
@@ -39,27 +45,27 @@ public class DataSeeder implements CommandLineRunner {
         log.info("✅ DataSeeder complete.");
     }
 
-    private void seedUsers() {
-        log.info("Ensuring demo users exist...");
-        ensureDemoUser("usr-demo-customer", "Demo Customer", "customer@gmail.com", "password123", "CUSTOMER", null);
-        ensureDemoUser("usr-demo-admin", "Demo Admin", "admin@gmail.com", "admin123", "ADMIN", null);
-        ensureDemoUser("usr-demo-hotel", "Demo Hotel Partner", "hotel@gmail.com", "hotel123", "HOTEL_PARTNER", "Voyago Demo Stays");
-        ensureDemoUser("usr-demo-vehicle", "Demo Vehicle Partner", "vehicle@gmail.com", "vehicle123", "VEHICLE_PARTNER", "Voyago Demo Rides");
+    private void seedDevelopmentAccounts() {
+        ensureDevelopmentAccount("Admin", "admin@gmail.com", "admin123", "ADMIN", null);
+        ensureDevelopmentAccount("Customer", "customer@gmail.com", "password123", "CUSTOMER", null);
+        ensureDevelopmentAccount("Hotel Partner", "hotel@gmail.com", "hotel123", "HOTEL_PARTNER", "APPROVED");
+        ensureDevelopmentAccount("Vehicle Partner", "vehicle@gmail.com", "vehicle123", "VEHICLE_PARTNER", "APPROVED");
+        log.info("Development accounts are enabled for this environment.");
     }
 
-    private void ensureDemoUser(String id, String name, String email, String password, String role, String businessName) {
-        User user = userRepository.findByEmail(email).orElse(null);
-        if (user != null) {
-            return;
-        }
-        user = new User();
-        user.setId(id);
+    private void ensureDevelopmentAccount(
+            String name,
+            String email,
+            String password,
+            String role,
+            String partnerStatus
+    ) {
+        User user = userRepository.findByEmail(email).orElseGet(User::new);
         user.setName(name);
         user.setEmail(email);
         user.setPasswordHash(passwordEncoder.encode(password));
         user.setRole(role);
-        user.setPartnerBusinessName(businessName);
-        user.setPartnerStatus("CUSTOMER".equals(role) || "ADMIN".equals(role) ? null : "APPROVED");
+        user.setPartnerStatus(partnerStatus);
         user.setActive(true);
         userRepository.save(user);
     }

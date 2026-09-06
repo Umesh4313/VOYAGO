@@ -8,13 +8,13 @@
 - **Port**: 3000
 - **Framework**: React + Vite + TypeScript
 
-### Backend: ❌ NEEDS MONGODB
-- **Status**: Compilation successful but needs MongoDB to run
-- **Port**: 8080 (when running)
+### Backend: ✓ RUNNING
+- **Status**: Running with MongoDB
+- **Port**: 8001
 - **Framework**: Spring Boot + MongoDB
 
-### MongoDB: ❌ NOT INSTALLED
-- **Status**: Not detected on system
+### MongoDB: ✓ CONNECTED
+- **Status**: Connected on port 27017
 - MongoDB is required for the backend to work
 
 ---
@@ -63,8 +63,8 @@ Started VoyagoApplication in X.XXX seconds
 **Frontend** (Already Running):
 - http://localhost:3000
 
-**Backend** (After you start it):
-- http://localhost:8080/api
+**Backend**:
+- http://localhost:8001/api
 
 ---
 
@@ -84,12 +84,11 @@ mvn spring-boot:run
 
 ---
 
-## 🔐 Default Login Credentials
+## 🔐 Account Access
 
-Once everything is running:
-
-- **Email**: `admin@voyago.com`
-- **Password**: `admin123`
+Create a customer, hotel partner, or vehicle partner account through the
+application. Administrative and seeded development accounts are private and
+must not be shared in client-facing documentation.
 
 ---
 

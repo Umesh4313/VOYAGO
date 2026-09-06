@@ -7,6 +7,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Random;
 import java.util.stream.Collectors;
@@ -36,11 +37,15 @@ public class BookingService {
                 .orElseThrow(() -> new RuntimeException("Booking not found: " + id));
     }
 
-    public Booking createBooking(BookingRequest req) {
+    public synchronized Booking createBooking(BookingRequest req) {
         // Resolve transport snapshot
         TravelOption transport = null;
         if (req.getTransportId() != null && !req.getTransportId().isBlank()) {
             transport = travelOptionRepository.findById(req.getTransportId()).orElse(null);
+            if (transport == null) {
+                throw new RuntimeException("Selected transport option is no longer available.");
+            }
+            validateTransportSeats(req, transport);
         }
 
         // Resolve hotel snapshot
@@ -54,12 +59,14 @@ public class BookingService {
                         .filter(r -> r.getId().equals(req.getRoomId()))
                         .findFirst().orElse(null);
                 if (room != null) {
-                    if (room.getAvailableCount() <= 0 || !room.isActive()) {
-                        throw new RuntimeException("Room '" + room.getName() + "' is fully booked or inactive.");
+                    if (!room.isActive()) {
+                        throw new RuntimeException("Room '" + room.getName() + "' is inactive.");
                     }
+                    validateRoomAvailability(req, hotel.getId(), room);
                     hotelSnapshot = Booking.BookingHotel.builder()
                             .id(hotel.getId())
                             .name(hotel.getName())
+                            .roomId(room.getId())
                             .roomType(room.getType())
                             .roomName(room.getName())
                             .pricePerNight(room.getPricePerNight())
@@ -77,7 +84,10 @@ public class BookingService {
         if (req.getVehicleId() != null && !req.getVehicleId().isBlank()) {
             vehicle = vehicleRepository.findById(req.getVehicleId()).orElse(null);
             if (vehicle != null) {
-                if (!vehicle.isAvailable()) {
+                if (!vehicle.isAvailable() && !"AVAILABLE".equals(vehicle.getRentalStatus())) {
+                    throw new RuntimeException("Vehicle '" + vehicle.getName() + "' is not available.");
+                }
+                if (hasOverlappingVehicleBooking(req, vehicle.getId())) {
                     throw new RuntimeException("Vehicle '" + vehicle.getName() + "' is not available.");
                 }
                 vehicleSnapshot = Booking.BookingVehicle.builder()
@@ -109,8 +119,8 @@ public class BookingService {
         double totalCost = subtotal + taxesAndFees;
 
         // Unique booking ID
-        int randomNum = 10000 + new Random().nextInt(90000);
-        String bookingId = "VOY-2026-" + randomNum;
+        String bookingId = createUniqueBookingId();
+        int randomNum = Math.abs(bookingId.hashCode() % 90000);
 
         // Payment snapshot
         Booking.PaymentDetails payment = Booking.PaymentDetails.builder()
@@ -157,6 +167,7 @@ public class BookingService {
                     r.setBookedUnits(booked);
                     r.setAvailableCount(Math.max(0, total - booked));
                 }
+
                 return r;
             }).collect(Collectors.toList()));
             hotelRepository.save(hotel);
@@ -190,6 +201,57 @@ public class BookingService {
         return saved;
     }
 
+    private String createUniqueBookingId() {
+        String bookingId;
+        do {
+            bookingId = "VOY-" + LocalDate.now().getYear() + "-" + (10000 + new Random().nextInt(90000));
+        } while (bookingRepository.existsById(bookingId));
+        return bookingId;
+    }
+
+    private void validateTransportSeats(BookingRequest request, TravelOption transport) {
+        if (request.getSelectedSeats() == null || request.getSelectedSeats().size() != request.getTravelersCount()) {
+            throw new RuntimeException("Select exactly one available seat for each traveler.");
+        }
+        List<String> occupied = transport.getOccupiedSeats() == null ? List.of() : transport.getOccupiedSeats();
+        request.getSelectedSeats().stream()
+                .filter(occupied::contains)
+                .findFirst()
+                .ifPresent(seat -> {
+                    throw new RuntimeException("Selected seat " + seat + " is no longer available. Please choose another seat.");
+                });
+        boolean alreadyBooked = bookingRepository.findByTransport_Id(transport.getId()).stream()
+                .filter(booking -> datesOverlap(request.getDepartureDate(), request.getReturnDate(), booking.getDepartureDate(), booking.getReturnDate()))
+                .flatMap(booking -> booking.getSelectedSeats() == null ? java.util.stream.Stream.empty() : booking.getSelectedSeats().stream())
+                .anyMatch(request.getSelectedSeats()::contains);
+        if (alreadyBooked) {
+            throw new RuntimeException("One or more selected seats are already booked for these dates.");
+        }
+    }
+
+    private void validateRoomAvailability(BookingRequest request, String hotelId, HotelRoom room) {
+        long overlappingRooms = bookingRepository.findByHotel_Id(hotelId).stream()
+                .filter(booking -> datesOverlap(request.getDepartureDate(), request.getReturnDate(), booking.getDepartureDate(), booking.getReturnDate()))
+                .filter(booking -> booking.getHotel() != null && room.getId().equals(booking.getHotel().getRoomId()))
+                .count();
+        if (overlappingRooms >= room.getTotalUnits()) {
+            throw new RuntimeException("No rooms available for these dates.");
+        }
+    }
+
+    private boolean hasOverlappingVehicleBooking(BookingRequest request, String vehicleId) {
+        return bookingRepository.findByVehicle_Id(vehicleId).stream()
+                .anyMatch(booking -> datesOverlap(request.getDepartureDate(), request.getReturnDate(), booking.getDepartureDate(), booking.getReturnDate()));
+    }
+
+    private boolean datesOverlap(String requestedStart, String requestedEnd, String existingStart, String existingEnd) {
+        LocalDate requestedFrom = LocalDate.parse(requestedStart);
+        LocalDate requestedTo = LocalDate.parse(requestedEnd);
+        LocalDate existingFrom = LocalDate.parse(existingStart);
+        LocalDate existingTo = LocalDate.parse(existingEnd);
+        return requestedFrom.isBefore(existingTo) && requestedTo.isAfter(existingFrom);
+    }
+
     public Booking cancelBooking(String bookingId) {
         Booking booking = getById(bookingId);
         if ("CANCELLED".equals(booking.getStatus())) {
@@ -201,9 +263,9 @@ public class BookingService {
         // Restore hotel room
         if (booking.getHotel() != null) {
             hotelRepository.findById(booking.getHotel().getId()).ifPresent(hotel -> {
-                String roomName = booking.getHotel().getRoomName();
+                String roomId = booking.getHotel().getRoomId();
                 hotel.setRooms(hotel.getRooms().stream().map(r -> {
-                    if (r.getName().equals(roomName)) {
+                    if (r.getId().equals(roomId)) {
                         int total = r.getTotalUnits() > 0 ? r.getTotalUnits() : 8;
                         int booked = Math.max(0, r.getBookedUnits() - 1);
                         r.setBookedUnits(booked);
@@ -212,6 +274,19 @@ public class BookingService {
                     return r;
                 }).collect(Collectors.toList()));
                 hotelRepository.save(hotel);
+            });
+        }
+
+        // Restore seats reserved by this booking.
+        if (booking.getTransport() != null && booking.getSelectedSeats() != null) {
+            travelOptionRepository.findById(booking.getTransport().getId()).ifPresent(transport -> {
+                List<String> occupied = transport.getOccupiedSeats() == null
+                        ? new java.util.ArrayList<>()
+                        : new java.util.ArrayList<>(transport.getOccupiedSeats());
+                occupied.removeAll(booking.getSelectedSeats());
+                transport.setOccupiedSeats(occupied);
+                transport.setAvailableSeats(transport.getAvailableSeats() + booking.getSelectedSeats().size());
+                travelOptionRepository.save(transport);
             });
         }
 

@@ -17,6 +17,7 @@ import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 @Service
@@ -30,6 +31,10 @@ public class AuthService {
 
     public AuthResponse register(RegisterRequest request) {
         String email = request.getEmail().trim().toLowerCase();
+        String requestedRole = request.getRole().trim().toUpperCase();
+        if (!Set.of("CUSTOMER", "HOTEL_PARTNER", "VEHICLE_PARTNER").contains(requestedRole)) {
+            throw new RuntimeException("Only customer, hotel partner, or vehicle partner accounts can be created here.");
+        }
         if (userRepository.existsByEmail(email)) {
             throw new RuntimeException("Email already in use. Please log in instead.");
         }
@@ -38,10 +43,10 @@ public class AuthService {
                 .name(request.getName())
                 .email(email)
                 .passwordHash(passwordEncoder.encode(request.getPassword()))
-                .role("CUSTOMER")
+                .role(requestedRole)
                 .phone(request.getPhone())
-                .partnerBusinessName(null)
-                .partnerStatus(null)
+                .partnerBusinessName(request.getPartnerBusinessName())
+                .partnerStatus(requestedRole.endsWith("_PARTNER") ? "PENDING" : null)
                 .build();
 
         User saved = userRepository.save(user);
@@ -91,7 +96,7 @@ public class AuthService {
         user.setPasswordResetTokenExpiresAt(LocalDateTime.now().plusMinutes(30));
         userRepository.save(user);
         return Map.of(
-                "message", "Demo reset email sent.",
+                "message", "Password reset link created.",
                 "resetUrl", "http://localhost:3000/?resetToken=" + token
         );
     }

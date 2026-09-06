@@ -49,13 +49,13 @@ export const HotelPartnerDashboard: React.FC = () => {
     updateHotelRoomPrice,
     updateHotelRoomDetails,
     toggleHotelRoomAvailability,
-    switchRole,
+    logout,
     notifications,
     addNotification,
   } = useApp();
 
   // Find partner's hotel
-  const myHotel = hotels.find((h) => h.id === 'hotel-goa-taj') || hotels[0];
+  const myHotel = hotels.find((h) => h.partnerId === currentUser.id);
 
   const [activeTab, setActiveTab] = useState<HotelTab>('dashboard');
   const [revenuePeriod, setRevenuePeriod] = useState<RevenuePeriod>('current');
@@ -87,6 +87,26 @@ export const HotelPartnerDashboard: React.FC = () => {
   const [propDesc, setPropDesc] = useState(myHotel.description);
   const [propPhone, setPropPhone] = useState('+91 832 6683333');
   const [propEmail, setPropEmail] = useState('taj.goa@partner.voyago.com');
+
+  if (!myHotel) {
+    return (
+      <div className="max-w-4xl mx-auto px-6 py-16">
+        <div className="bg-white border border-stone-200 rounded-3xl p-10 text-center shadow-xs">
+          <h1 className="text-3xl font-bold text-stone-900">Welcome, {currentUser.name}</h1>
+          <p className="mt-3 text-stone-500">
+            Your hotel partner account is ready. Add your first property to start managing rooms and bookings.
+          </p>
+          <button
+            type="button"
+            onClick={logout}
+            className="mt-8 px-5 py-3 rounded-full bg-[#9D3373] text-white font-bold text-sm"
+          >
+            Sign out
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   const hotelBookings = bookings.filter((b) => b.hotel?.id === myHotel.id);
   const totalRevenue = hotelBookings.reduce((sum, b) => sum + (b.hotel?.total || 0), 0);
@@ -213,7 +233,7 @@ export const HotelPartnerDashboard: React.FC = () => {
 
               <button
                 type="button"
-                onClick={() => switchRole('CUSTOMER')}
+                onClick={logout}
                 className="px-4 py-2.5 rounded-full border border-stone-300 hover:border-stone-400 text-xs font-bold uppercase tracking-wider text-stone-700 bg-white hover:bg-stone-50 transition-colors cursor-pointer"
               >
                 Customer View
@@ -283,7 +303,7 @@ export const HotelPartnerDashboard: React.FC = () => {
               <div className="border-t border-stone-200 pt-2 mt-2">
                 <button
                   type="button"
-                  onClick={() => switchRole('CUSTOMER')}
+                  onClick={logout}
                   className="w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-xs text-stone-500 hover:text-rose-600 hover:bg-rose-50 transition-all font-medium uppercase tracking-wider cursor-pointer"
                 >
                   <LogOut className="w-4 h-4" />
@@ -888,7 +908,7 @@ export const HotelPartnerDashboard: React.FC = () => {
                   Partner Notifications
                 </h3>
                 <div className="space-y-3">
-                  {notifications.filter((notification) => notification.userId === currentUser.id || notification.roleTarget === 'HOTEL_PARTNER').map((notification) => <div key={notification.id} className="bg-white border border-stone-200 rounded-2xl p-4 flex items-start gap-3 shadow-xs">
+                  {notifications.filter((notification) => notification.userId === currentUser.id).map((notification) => <div key={notification.id} className="bg-white border border-stone-200 rounded-2xl p-4 flex items-start gap-3 shadow-xs">
                     <Bell className="w-5 h-5 text-[#9D3373] shrink-0 mt-0.5" />
                     <div>
                       <h4 className="text-sm font-semibold text-stone-900">{notification.title}</h4><p className="text-xs text-stone-500 mt-0.5">{notification.message}</p>

@@ -47,13 +47,13 @@ export const VehiclePartnerDashboard: React.FC = () => {
     bookings,
     updateVehiclePriceAndStatus,
     addVehicle,
-    switchRole,
+    logout,
     addNotification,
     notifications,
   } = useApp();
 
   // Partner manages Goa fleet
-  const myVehicles = vehicles.filter((v) => v.destinationId === 'dest-goa');
+  const myVehicles = vehicles.filter((v) => v.partnerId === currentUser.id);
 
   const [activeTab, setActiveTab] = useState<VehicleTab>('dashboard');
   const [revenuePeriod, setRevenuePeriod] = useState<RevenuePeriod>('current');
@@ -100,7 +100,9 @@ export const VehiclePartnerDashboard: React.FC = () => {
   const [newMaintType, setNewMaintType] = useState('Oil & Filter Change');
   const [newMaintCost, setNewMaintCost] = useState(2500);
 
-  const vehicleBookings = bookings.filter((b) => b.vehicle !== undefined);
+  const vehicleBookings = bookings.filter((b) =>
+    b.vehicle !== undefined && myVehicles.some((vehicle) => vehicle.id === b.vehicle?.id)
+  );
   const totalRevenue = vehicleBookings.reduce((sum, b) => sum + (b.vehicle?.total || 0), 0);
   const periodConfig: Record<RevenuePeriod, { label: string; factor: number; points: string[] }> = {
     current: { label: 'Current period', factor: 1, points: ['W1', 'W2', 'W3', 'W4'] },
@@ -132,7 +134,7 @@ export const VehiclePartnerDashboard: React.FC = () => {
       isAvailable: true,
       features: ['Air Conditioning', 'Comprehensive Insurance', 'Unlimited Kilometers'],
       rating: 4.8,
-      partnerId: 'part-goa-wheels',
+      partnerId: currentUser.id,
     });
 
     addNotification({
@@ -214,7 +216,7 @@ export const VehiclePartnerDashboard: React.FC = () => {
 
               <button
                 type="button"
-                onClick={() => switchRole('CUSTOMER')}
+                onClick={logout}
                 className="px-4 py-2.5 rounded-full border border-stone-300 hover:border-stone-400 text-xs font-bold uppercase tracking-wider text-stone-700 bg-white hover:bg-stone-50 transition-colors cursor-pointer"
               >
                 Customer View
@@ -283,7 +285,7 @@ export const VehiclePartnerDashboard: React.FC = () => {
               <div className="border-t border-stone-200 pt-2 mt-2">
                 <button
                   type="button"
-                  onClick={() => switchRole('CUSTOMER')}
+                  onClick={logout}
                   className="w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-xs text-stone-500 hover:text-rose-600 hover:bg-rose-50 transition-all font-medium uppercase tracking-wider cursor-pointer"
                 >
                   <LogOut className="w-4 h-4" />
@@ -882,7 +884,7 @@ export const VehiclePartnerDashboard: React.FC = () => {
                   Fleet Alerts
                 </h3>
                 <div className="space-y-3">
-                {notifications.filter((notification) => notification.userId === currentUser.id || notification.roleTarget === 'VEHICLE_PARTNER').map((notification) => <div key={notification.id} className="bg-white border border-stone-200 rounded-2xl p-4 flex items-start gap-3 shadow-xs">
+                {notifications.filter((notification) => notification.userId === currentUser.id).map((notification) => <div key={notification.id} className="bg-white border border-stone-200 rounded-2xl p-4 flex items-start gap-3 shadow-xs">
                   <Bell className="w-5 h-5 text-[#9D3373] shrink-0 mt-0.5" />
                   <div>
                     <h4 className="text-sm font-semibold text-stone-900">{notification.title}</h4>

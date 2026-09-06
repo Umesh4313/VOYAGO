@@ -56,7 +56,7 @@ export const TripsSection: React.FC = () => {
   const [scrollIndex, setScrollIndex] = useState(0);
 
   const handleSelectTrip = (trip: TripPackage) => {
-    startNewTrip(trip.destinationId, '2026-10-15', '2026-10-20', 2, 'Moderate', 'CAR');
+    startNewTrip(trip.destinationId, '2026-10-15', '2026-10-20', 2, 'Moderate', 'CAR', false);
     openPlanningLogin();
   };
 

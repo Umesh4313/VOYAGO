@@ -280,12 +280,8 @@ Response: 200 OK
 
 ## 🌱 Data Seeding
 
-The application automatically seeds initial data on startup via `DataSeeder.java`:
+The application automatically seeds catalog data on startup via `DataSeeder.java`:
 
-- **Admin User**: `admin@gmail.com` / `admin123`
-- **Customer User**: `customer@gmail.com` / `password123`
-- **Hotel Partner**: `hotel@gmail.com` / `hotel123`
-- **Vehicle Partner**: `vehicle@gmail.com` / `vehicle123`
 - **Sample Destinations**: Goa, Kerala, Manali, etc.
 - **Sample Hotels**: Multiple hotels per destination
 - **Sample Vehicles**: Cars, bikes, scooters
@@ -299,10 +295,10 @@ The application automatically seeds initial data on startup via `DataSeeder.java
 # Test health
 curl http://localhost:8001/api/destinations
 
-# Test authentication
-curl -X POST http://localhost:8001/api/auth/login `
+# Register a customer account
+curl -X POST http://localhost:8001/api/auth/register `
   -H "Content-Type: application/json" `
-  -d '{"email":"admin@gmail.com","password":"admin123"}'
+  -d '{"name":"Client User","email":"client@example.com","password":"password123","role":"CUSTOMER"}'
 
 # Test authenticated endpoint
 curl http://localhost:8001/api/users/me `
@@ -362,12 +358,3 @@ mvn spring-boot:run | Tee-Object -FilePath backend.log
 ---
 
 **Built with ❤️ using Spring Boot**
-
-## Default Credentials (Seeded)
-
-| Role | Email | Password |
-|------|-------|----------|
-| Admin | admin@gmail.com | admin123 |
-| Customer | customer@gmail.com | password123 |
-| Hotel Partner | hotel@gmail.com | hotel123 |
-| Vehicle Partner | vehicle@gmail.com | vehicle123 |

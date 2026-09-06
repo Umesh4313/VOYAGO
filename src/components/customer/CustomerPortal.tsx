@@ -47,7 +47,7 @@ export const CustomerPortal: React.FC = () => {
   const {
     currentUser,
     setCurrentUser,
-    switchRole,
+    logout,
     destinations,
     travelOptions,
     hotels,
@@ -88,8 +88,10 @@ export const CustomerPortal: React.FC = () => {
   const [smsAlerts, setSmsAlerts] = useState(true);
   const [darkThemeLock, setDarkThemeLock] = useState(true);
 
-  const customerBookings = bookings.filter((b) => b.userId === currentUser.id || currentUser.role === 'CUSTOMER');
-  const unreadNotifsCount = notifications.filter((n) => !n.isRead).length;
+  const customerBookings = bookings.filter((b) => b.userId === currentUser.id);
+  const customerNotifications = notifications.filter((n) => n.userId === currentUser.id);
+  const customerSavedItems = savedItems.filter((item) => item.userId === currentUser.id);
+  const unreadNotifsCount = customerNotifications.filter((n) => !n.isRead).length;
 
   const handleSaveProfile = (e: React.FormEvent) => {
     e.preventDefault();
@@ -173,7 +175,7 @@ export const CustomerPortal: React.FC = () => {
                 { id: 'vehicles', label: 'Vehicle Rentals', icon: Car },
                 { id: 'places', label: 'Tourist Places', icon: MapPin },
                 { id: 'my-trips', label: 'My Trips', icon: CalendarCheck, badge: customerBookings.length },
-                { id: 'saved', label: 'Saved Places', icon: Bookmark, badge: savedItems.length },
+                { id: 'saved', label: 'Saved Places', icon: Bookmark, badge: customerSavedItems.length },
                 { id: 'notifications', label: 'Notifications', icon: Bell, badge: unreadNotifsCount },
                 { id: 'profile', label: 'Profile', icon: UserIcon },
                 { id: 'settings', label: 'Settings', icon: Settings },
@@ -213,7 +215,7 @@ export const CustomerPortal: React.FC = () => {
               <div className="border-t border-stone-100 pt-2 mt-2">
                 <button
                   type="button"
-                  onClick={() => switchRole('CUSTOMER')}
+                  onClick={logout}
                   className="w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-xs text-stone-500 hover:text-rose-600 hover:bg-rose-50 transition-all font-semibold uppercase tracking-wider"
                 >
                   <LogOut className="w-4 h-4" />
@@ -257,7 +259,7 @@ export const CustomerPortal: React.FC = () => {
                       Saved Sights
                     </span>
                     <p className="text-3xl font-bold tracking-tight text-stone-900">
-                      {savedItems.length}
+                      {customerSavedItems.length}
                     </p>
                     <p className="text-xs text-stone-500 mt-1">Places in your bucket list</p>
                   </div>
@@ -1063,7 +1065,7 @@ export const CustomerPortal: React.FC = () => {
                   </p>
                 </div>
 
-                {savedItems.length === 0 ? (
+                {customerSavedItems.length === 0 ? (
                   <div className="bg-white border border-stone-200/90 rounded-3xl p-12 text-center space-y-4 shadow-xs">
                     <Bookmark className="w-12 h-12 text-stone-400 mx-auto" />
                     <h4 className="text-2xl font-bold text-stone-900">
@@ -1075,7 +1077,7 @@ export const CustomerPortal: React.FC = () => {
                   </div>
                 ) : (
                   <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
-                    {savedItems.map((item) => (
+                    {customerSavedItems.map((item) => (
                       <div
                         key={item.id}
                         className="bg-white border border-stone-200/90 rounded-2xl overflow-hidden shadow-xs flex flex-col justify-between"
@@ -1138,7 +1140,7 @@ export const CustomerPortal: React.FC = () => {
                     </p>
                   </div>
 
-                  {notifications.length > 0 && (
+                  {customerNotifications.length > 0 && (
                     <button
                       type="button"
                       onClick={markAllNotificationsRead}
@@ -1150,7 +1152,7 @@ export const CustomerPortal: React.FC = () => {
                 </div>
 
                 <div className="space-y-3">
-                  {notifications.map((notif) => (
+                  {customerNotifications.map((notif) => (
                     <div
                       key={notif.id}
                       onClick={() => markNotificationRead(notif.id)}

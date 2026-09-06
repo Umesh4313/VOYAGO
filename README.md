@@ -167,25 +167,16 @@ voyago/
 └── README.md                # This file
 ```
 
-## 🔑 Demo Credentials
+## 🔐 Account Access
 
-These demo accounts are seeded into MongoDB on every backend startup:
-
-| Role | Email | Password |
-|------|-------|----------|
-| Admin | `admin@gmail.com` | `admin123` |
-| Customer | `customer@gmail.com` | `password123` |
-| Hotel Partner | `hotel@gmail.com` | `hotel123` |
-| Vehicle Partner | `vehicle@gmail.com` | `vehicle123` |
-
-Unknown emails must be registered before login. Forgot-password links are demo reset links shown after the account email is verified.
+Users create their own customer account through Sign up. Administrative and partner accounts are provisioned by an administrator and cannot be created through public signup.
 
 ## 🔌 API Endpoints
 
 ### Authentication
 - `POST /api/auth/register` - Register new user
 - `POST /api/auth/login` - Login user
-- `POST /api/auth/forgot-password` - Verify an email and create a demo reset link
+- `POST /api/auth/forgot-password` - Verify an email and create a password reset link
 - `POST /api/auth/reset-password` - Set a new password using a reset token
 - `GET /api/auth/me` - Get current user info
 
@@ -297,12 +288,3 @@ For issues or questions, please create an issue in the repository.
 
 **Happy Traveling with VOYAGO! ✈️🌍**
 
-
-## Default Credentials (Seeded)
-
-| Role | Email | Password |
-|------|-------|----------|
-| Admin | admin@gmail.com | admin123 |
-| Customer | customer@gmail.com | password123 |
-| Hotel Partner | hotel@gmail.com | hotel123 |
-| Vehicle Partner | vehicle@gmail.com | vehicle123 |

@@ -44,7 +44,7 @@ export const PopularDestinations: React.FC = () => {
   ];
 
   const handleSelectDestination = (destId: string) => {
-    startNewTrip(destId, '2026-10-15', '2026-10-19', 2, 'Moderate', 'CAR');
+    startNewTrip(destId, '2026-10-15', '2026-10-19', 2, 'Moderate', 'CAR', false);
     openPlanningLogin();
   };
 

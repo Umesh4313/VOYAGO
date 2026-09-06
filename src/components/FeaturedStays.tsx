@@ -3,7 +3,7 @@ import { Star } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 
 export const FeaturedStays: React.FC = () => {
-  const { navigateToCustomerTab, openPlanningLogin } = useApp();
+  const { openPlanningLogin } = useApp();
 
   const stays = [
     {
@@ -59,7 +59,7 @@ export const FeaturedStays: React.FC = () => {
           {stays.map((stay) => (
             <div
               key={stay.id}
-              onClick={() => navigateToCustomerTab('hotels')}
+              onClick={openPlanningLogin}
               className="home-card-motion bg-white rounded-3xl overflow-hidden border border-stone-200/80 shadow-xs hover:shadow-lg transition-all duration-300 cursor-pointer group flex flex-col"
               id={`stay-${stay.id}`}
             >

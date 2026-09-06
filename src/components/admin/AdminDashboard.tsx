@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Shield,
   TrendingUp,
@@ -171,7 +171,7 @@ export const AdminDashboard: React.FC = () => {
     destinations,
     touristPlaces,
     travelOptions,
-    switchRole,
+    logout,
     addNotification,
     updateHotelRoomPrice,
     updateHotelRoomDetails,
@@ -184,12 +184,20 @@ export const AdminDashboard: React.FC = () => {
     removeVehicle,
     addTransportOption,
     users,
+    refreshUsers,
     adminActiveTab,
     setAdminActiveTab,
   } = useApp();
 
   const activeTab = (adminActiveTab as AdminTab) || 'dashboard';
   const setActiveTab = (tab: AdminTab) => setAdminActiveTab(tab);
+
+  useEffect(() => {
+    if (activeTab !== 'customers') return;
+    refreshUsers().catch((error) => {
+      console.error('Failed to load registered users for the admin dashboard.', error);
+    });
+  }, [activeTab, refreshUsers]);
 
   const [logFilter, setLogFilter] = useState('');
   const [transportFilter, setTransportFilter] = useState<TravelMode | 'ALL'>('ALL');
@@ -442,7 +450,7 @@ export const AdminDashboard: React.FC = () => {
             <div className="flex items-center gap-3">
               <button
                 type="button"
-                onClick={() => switchRole('CUSTOMER')}
+                onClick={logout}
                 className="px-5 py-2.5 rounded-full border border-stone-300 hover:border-stone-400 text-xs font-bold uppercase tracking-wider text-stone-700 bg-white hover:bg-stone-50 transition-colors cursor-pointer"
               >
                 Exit to Customer View
@@ -471,7 +479,7 @@ export const AdminDashboard: React.FC = () => {
                 { id: 'transport', label: 'Manage Flights/Trains/Buses', icon: Plane, badge: travelOptions.length },
                 { id: 'hotels', label: 'Hotels & Partners', icon: HotelIcon, badge: hotels.length },
                 { id: 'vehicles', label: 'Vehicles & Fleet', icon: Car, badge: vehicles.length },
-                { id: 'customers', label: 'View All Customers', icon: Users },
+                { id: 'customers', label: 'View All Users', icon: Users },
                 { id: 'bookings', label: 'View All Bookings', icon: FileText, badge: bookings.length },
                 { id: 'analytics', label: 'Revenue Analytics', icon: BarChart3 },
                 { id: 'logs', label: 'System Audit Logs', icon: FileText, badge: auditLogs.length },
@@ -510,7 +518,7 @@ export const AdminDashboard: React.FC = () => {
               <div className="border-t border-stone-200 pt-2 mt-2">
                 <button
                   type="button"
-                  onClick={() => switchRole('CUSTOMER')}
+                  onClick={logout}
                   className="w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-xs text-stone-500 hover:text-rose-600 hover:bg-rose-50 transition-all font-medium uppercase tracking-wider cursor-pointer"
                 >
                   <LogOut className="w-4 h-4" />
@@ -1256,11 +1264,11 @@ export const AdminDashboard: React.FC = () => {
             {activeTab === 'customers' && (
               <div className="bg-white border border-stone-200 rounded-3xl p-6 md:p-8 space-y-6 shadow-xs animate-in fade-in">
                 <div>
-                  <h3 className="font-serif-display text-3xl font-light italic text-stone-900">Registered Customers</h3>
-                  <p className="text-xs text-stone-500">Active traveler accounts with trip counts and verification status</p>
+                  <h3 className="font-serif-display text-3xl font-light italic text-stone-900">Registered Users</h3>
+                  <p className="text-xs text-stone-500">Customers and partner accounts registered in MongoDB</p>
                 </div>
                 <div className="space-y-3">
-                  {users.filter((user) => user.role === 'CUSTOMER').map((cust) => (
+                  {users.map((cust) => (
                     <div key={cust.id} className="bg-[#FAF8F5] border border-stone-200 rounded-xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
                       <div>
                         <h4 className="font-serif-display text-base font-light text-stone-900">{cust.name}</h4>
@@ -1268,11 +1276,17 @@ export const AdminDashboard: React.FC = () => {
                         <p className="text-xs text-stone-500 mt-1"><MapPin className="inline w-3 h-3 mr-1" />{cust.address || cust.city || 'Location not provided'}</p>
                       </div>
                       <div className="text-right">
-                        <span className="text-xs font-semibold text-[#9D3373] block">{bookings.filter((booking) => booking.userId === cust.id).length} Trips</span>
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-[#9D3373] block">{cust.role.replace('_', ' ')}</span>
+                        {cust.role === 'CUSTOMER' && (
+                          <span className="text-xs font-semibold text-stone-700 block">{bookings.filter((booking) => booking.userId === cust.id).length} Trips</span>
+                        )}
                         <span className="text-[10px] text-emerald-700 font-medium">{cust.isActive === false ? 'Inactive' : 'Active Member'}</span>
                       </div>
                     </div>
                   ))}
+                  {users.length === 0 && (
+                    <p className="text-sm text-stone-500 py-6 text-center">No registered users found.</p>
+                  )}
                 </div>
               </div>
             )}

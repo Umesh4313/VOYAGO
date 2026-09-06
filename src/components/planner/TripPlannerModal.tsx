@@ -233,12 +233,12 @@ export const TripPlannerModal: React.FC = () => {
             <div className="flex items-center gap-2 sm:gap-4 min-w-max">
               {[
                 { s: 1, label: 'Trip Inputs' },
-                { s: 2, label: '1. Transport' },
-                { s: 3, label: '2. Hotel & Stay' },
-                { s: 4, label: '3. Rides (Optional)' },
-                { s: 5, label: '4. Attractions' },
-                { s: 6, label: '5. Summary' },
-                { s: 7, label: '6. Payment' },
+                { s: 2, label: 'Transport' },
+                { s: 3, label: 'Hotel & Stay' },
+                { s: 4, label: 'Rides (Optional)' },
+                { s: 5, label: 'Attractions' },
+                { s: 6, label: 'Summary' },
+                { s: 7, label: 'Payment' },
               ].map((stepItem) => {
                 const isPassed = stepItem.s < plannerStep;
                 const isCurrent = stepItem.s === plannerStep;
