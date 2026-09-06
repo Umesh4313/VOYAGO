@@ -82,7 +82,7 @@ MongoDB will run on `mongodb://localhost:27017/voyago`
 
 The `.env` file has already been created with the following configuration:
 ```env
-VITE_API_URL=http://localhost:8080/api
+VITE_API_URL=http://localhost:8001/api
 ```
 
 ### 4. Install Frontend Dependencies
@@ -100,7 +100,7 @@ Backend dependencies will be automatically downloaded by Maven when you first ru
 .\start-dev.ps1
 ```
 This will open two PowerShell windows:
-- Backend (Spring Boot) on `http://localhost:8080`
+- Backend (Spring Boot) on `http://localhost:8001`
 - Frontend (React + Vite) on `http://localhost:3000`
 
 ### Option 2: Run Backend and Frontend Separately
@@ -131,7 +131,7 @@ npm run dev
 ## 🌐 Access the Application
 
 - **Frontend**: http://localhost:3000
-- **Backend API**: http://localhost:8080/api
+- **Backend API**: http://localhost:8001/api
 - **MongoDB**: mongodb://localhost:27017/voyago
 
 ## 📁 Project Structure
@@ -167,20 +167,26 @@ voyago/
 └── README.md                # This file
 ```
 
-## 🔑 Default Admin Credentials
+## 🔑 Demo Credentials
 
-The application seeds a default admin user on first startup:
+These demo accounts are seeded into MongoDB on every backend startup:
 
-- **Email**: `admin@voyago.com`
-- **Password**: `admin123`
+| Role | Email | Password |
+|------|-------|----------|
+| Admin | `admin@gmail.com` | `admin123` |
+| Customer | `customer@gmail.com` | `password123` |
+| Hotel Partner | `hotel@gmail.com` | `hotel123` |
+| Vehicle Partner | `vehicle@gmail.com` | `vehicle123` |
 
-You can create additional users through the registration page.
+Unknown emails must be registered before login. Forgot-password links are demo reset links shown after the account email is verified.
 
 ## 🔌 API Endpoints
 
 ### Authentication
 - `POST /api/auth/register` - Register new user
 - `POST /api/auth/login` - Login user
+- `POST /api/auth/forgot-password` - Verify an email and create a demo reset link
+- `POST /api/auth/reset-password` - Set a new password using a reset token
 - `GET /api/auth/me` - Get current user info
 
 ### Destinations
@@ -290,3 +296,13 @@ For issues or questions, please create an issue in the repository.
 ---
 
 **Happy Traveling with VOYAGO! ✈️🌍**
+
+
+## Default Credentials (Seeded)
+
+| Role | Email | Password |
+|------|-------|----------|
+| Admin | admin@gmail.com | admin123 |
+| Customer | customer@gmail.com | password123 |
+| Hotel Partner | hotel@gmail.com | hotel123 |
+| Vehicle Partner | vehicle@gmail.com | vehicle123 |

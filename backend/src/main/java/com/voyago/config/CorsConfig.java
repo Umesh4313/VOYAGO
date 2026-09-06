@@ -21,7 +21,10 @@ public class CorsConfig {
         CorsConfiguration config = new CorsConfiguration();
 
         // Split the comma-separated origins
-        List<String> origins = Arrays.asList(allowedOriginsStr.split(","));
+        List<String> origins = Arrays.stream(allowedOriginsStr.split(","))
+                .map(String::trim)
+                .filter(origin -> !origin.isBlank())
+                .toList();
         config.setAllowedOrigins(origins);
         config.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"));
         config.setAllowedHeaders(Arrays.asList("Authorization", "Content-Type", "Accept", "X-Requested-With"));

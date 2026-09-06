@@ -27,6 +27,10 @@ public class User {
 
     private String passwordHash;
 
+    private String passwordResetToken;
+
+    private LocalDateTime passwordResetTokenExpiresAt;
+
     private String role; // CUSTOMER | HOTEL_PARTNER | VEHICLE_PARTNER | ADMIN
 
     private String phone;

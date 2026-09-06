@@ -34,7 +34,7 @@ import {
   Image,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
-import { Hotel, TravelMode, Destination, TouristPlace } from '../../types';
+import { Hotel, TravelMode, Destination, TouristPlace, TravelOption } from '../../types';
 
 type AdminTab =
   | 'dashboard'
@@ -182,6 +182,7 @@ export const AdminDashboard: React.FC = () => {
     updateTouristPlace,
     removeHotel,
     removeVehicle,
+    addTransportOption,
     users,
     adminActiveTab,
     setAdminActiveTab,
@@ -192,6 +193,22 @@ export const AdminDashboard: React.FC = () => {
 
   const [logFilter, setLogFilter] = useState('');
   const [transportFilter, setTransportFilter] = useState<TravelMode | 'ALL'>('ALL');
+  const [transportDestinationFilter, setTransportDestinationFilter] = useState('ALL');
+  const [newTransport, setNewTransport] = useState({
+    destinationId: '',
+    mode: 'FLIGHT' as TravelMode,
+    operator: '',
+    code: '',
+    fromCity: '',
+    toCity: '',
+    departureTime: '',
+    arrivalTime: '',
+    duration: '',
+    pricePerPerson: '0',
+    availableSeats: '0',
+    stops: 'Non-stop',
+    rating: '4.5',
+  });
   const [toast, setToast] = useState<string | null>(null);
 
   // Hotel management
@@ -293,6 +310,12 @@ export const AdminDashboard: React.FC = () => {
       log.details.toLowerCase().includes(logFilter.toLowerCase())
   );
 
+  const getTransportDestinationId = (item: TravelOption) => {
+    if (item.destinationId) return item.destinationId;
+    const routeText = `${item.id} ${item.toCity}`.toLowerCase();
+    return destinations.find((destination) => routeText.includes(destination.name.toLowerCase()))?.id;
+  };
+
   const showToast = (msg: string) => {
     setToast(msg);
     setTimeout(() => setToast(null), 3000);
@@ -339,6 +362,37 @@ export const AdminDashboard: React.FC = () => {
     setNewPlace({ name: '', destinationId: '', category: 'Nature', rating: '4.5', visitDuration: '2 hours', entryFee: '0', description: '', imageUrl: '', recommendedTime: 'Morning' });
     setShowAddPlace(false);
     showToast('Tourist place added.');
+  };
+
+  const handleAddTransport = () => {
+    if (!newTransport.destinationId || !newTransport.operator.trim() || !newTransport.code.trim() ||
+      !newTransport.fromCity.trim() || !newTransport.toCity.trim()) {
+      showToast('Select a destination and complete the transport route details.');
+      return;
+    }
+    const option: Omit<TravelOption, 'id'> = {
+      destinationId: newTransport.destinationId,
+      mode: newTransport.mode,
+      operator: newTransport.operator.trim(),
+      code: newTransport.code.trim(),
+      fromCity: newTransport.fromCity.trim(),
+      toCity: newTransport.toCity.trim(),
+      departureTime: newTransport.departureTime,
+      arrivalTime: newTransport.arrivalTime,
+      duration: newTransport.duration,
+      pricePerPerson: Number(newTransport.pricePerPerson),
+      availableSeats: Number(newTransport.availableSeats),
+      stops: newTransport.stops,
+      rating: Number(newTransport.rating),
+      tags: [],
+    };
+    addTransportOption(option);
+    showToast(`${newTransport.mode} schedule added for ${destinations.find((d) => d.id === newTransport.destinationId)?.name || 'destination'}.`);
+    setNewTransport({
+      destinationId: '', mode: 'FLIGHT', operator: '', code: '', fromCity: '', toCity: '',
+      departureTime: '', arrivalTime: '', duration: '', pricePerPerson: '0',
+      availableSeats: '0', stops: 'Non-stop', rating: '4.5',
+    });
   };
 
   // ── Toggle switch component ────────────────────────────────────────────────
@@ -800,6 +854,21 @@ export const AdminDashboard: React.FC = () => {
                       </div>
                     </div>
                   )}
+                  {editingDestination && (
+                    <div className="fixed inset-0 z-50 bg-stone-900/60 flex items-center justify-center p-4">
+                      <div className="bg-white rounded-3xl p-6 max-w-3xl w-full max-h-[90vh] overflow-y-auto space-y-4">
+                        <div className="flex justify-between items-center"><h3 className="text-xl font-bold">Edit Destination Details</h3><button type="button" onClick={() => setEditingDestination(null)}><X /></button></div>
+                        <div className="grid sm:grid-cols-2 gap-3">
+                          {(['name', 'state', 'country', 'tagline', 'bestTimeToVisit', 'imageUrl'] as const).map((field) => (
+                            <label key={field} className={labelCls}>{field}<input className={inputCls} value={editingDestination[field] || ''} onChange={(e) => setEditingDestination({ ...editingDestination, [field]: e.target.value })} /></label>
+                          ))}
+                          <label className={labelCls}>Description<textarea className={`${inputCls} h-24`} value={editingDestination.description} onChange={(e) => setEditingDestination({ ...editingDestination, description: e.target.value })} /></label>
+                          <label className={labelCls}>Highlights<input className={inputCls} value={editingDestination.highlights.join(', ')} onChange={(e) => setEditingDestination({ ...editingDestination, highlights: e.target.value.split(',').map((v) => v.trim()).filter(Boolean) })} /></label>
+                        </div>
+                        <button type="button" onClick={() => { updateDestination(editingDestination.id, editingDestination); setEditingDestination(null); showToast('Destination updated.'); }} className="px-5 py-2 rounded-full bg-[#9D3373] text-white text-xs font-bold uppercase">Save Changes</button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             )}
@@ -881,9 +950,47 @@ export const AdminDashboard: React.FC = () => {
                     ))}
                   </div>
                 </div>
+                <div className="bg-white border border-stone-200 rounded-2xl p-4 space-y-3 shadow-xs">
+                  <div className="flex items-center gap-2">
+                    <Plus className="w-4 h-4 text-[#9D3373]" />
+                    <h4 className="font-semibold text-sm text-stone-900">Add schedule for a destination</h4>
+                  </div>
+                  <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                    <select className={inputCls} value={newTransport.destinationId} onChange={(e) => setNewTransport({ ...newTransport, destinationId: e.target.value })}>
+                      <option value="">Select destination *</option>
+                      {destinations.map((destination) => <option key={destination.id} value={destination.id}>{destination.name}</option>)}
+                    </select>
+                    <select className={inputCls} value={newTransport.mode} onChange={(e) => setNewTransport({ ...newTransport, mode: e.target.value as TravelMode })}>
+                      <option value="FLIGHT">Flight</option>
+                      <option value="TRAIN">Train</option>
+                      <option value="BUS">Bus</option>
+                    </select>
+                    <input className={inputCls} placeholder="Operator *" value={newTransport.operator} onChange={(e) => setNewTransport({ ...newTransport, operator: e.target.value })} />
+                    <input className={inputCls} placeholder="Code / number *" value={newTransport.code} onChange={(e) => setNewTransport({ ...newTransport, code: e.target.value })} />
+                    <input className={inputCls} placeholder="From city *" value={newTransport.fromCity} onChange={(e) => setNewTransport({ ...newTransport, fromCity: e.target.value })} />
+                    <input className={inputCls} placeholder="To city *" value={newTransport.toCity} onChange={(e) => setNewTransport({ ...newTransport, toCity: e.target.value })} />
+                    <input className={inputCls} placeholder="Departure" value={newTransport.departureTime} onChange={(e) => setNewTransport({ ...newTransport, departureTime: e.target.value })} />
+                    <input className={inputCls} placeholder="Arrival" value={newTransport.arrivalTime} onChange={(e) => setNewTransport({ ...newTransport, arrivalTime: e.target.value })} />
+                    <input className={inputCls} placeholder="Duration" value={newTransport.duration} onChange={(e) => setNewTransport({ ...newTransport, duration: e.target.value })} />
+                    <input className={inputCls} type="number" min="0" placeholder="Price per person" value={newTransport.pricePerPerson} onChange={(e) => setNewTransport({ ...newTransport, pricePerPerson: e.target.value })} />
+                    <input className={inputCls} type="number" min="0" placeholder="Available seats" value={newTransport.availableSeats} onChange={(e) => setNewTransport({ ...newTransport, availableSeats: e.target.value })} />
+                    <input className={inputCls} placeholder="Stops / service notes" value={newTransport.stops} onChange={(e) => setNewTransport({ ...newTransport, stops: e.target.value })} />
+                  </div>
+                  <button type="button" onClick={handleAddTransport} className="px-4 py-2 rounded-full bg-[#9D3373] text-white text-xs font-bold uppercase">
+                    Add {newTransport.mode.toLowerCase()} schedule
+                  </button>
+                </div>
+                <div className="flex items-center gap-2">
+                  <label className="text-xs font-semibold text-stone-600">Destination</label>
+                  <select className={`${inputCls} max-w-xs`} value={transportDestinationFilter} onChange={(e) => setTransportDestinationFilter(e.target.value)}>
+                    <option value="ALL">All destinations</option>
+                    {destinations.map((destination) => <option key={destination.id} value={destination.id}>{destination.name}</option>)}
+                  </select>
+                </div>
                 <div className="space-y-3">
                   {travelOptions
                     .filter((t) => transportFilter === 'ALL' || t.mode === transportFilter)
+                    .filter((t) => transportDestinationFilter === 'ALL' || getTransportDestinationId(t) === transportDestinationFilter)
                     .map((item) => (
                       <div
                         key={item.id}
@@ -902,6 +1009,9 @@ export const AdminDashboard: React.FC = () => {
                             <p className="text-xs text-stone-500">
                               {item.fromCity} &rarr; {item.toCity} ({item.departureTime} - {item.arrivalTime})
                             </p>
+                            <p className="text-[10px] text-[#9D3373] font-semibold uppercase">
+                              {destinations.find((destination) => destination.id === getTransportDestinationId(item))?.name || 'Legacy schedule'}
+                            </p>
                           </div>
                         </div>
                         <div className="sm:text-right flex items-center gap-4 justify-between sm:justify-end">
@@ -912,21 +1022,6 @@ export const AdminDashboard: React.FC = () => {
                             <span className="text-[10px] text-stone-500">{item.availableSeats} seats left</span>
                           </div>
                       </div>
-                      {editingDestination && (
-                          <div className="fixed inset-0 z-50 bg-stone-900/60 flex items-center justify-center p-4">
-                            <div className="bg-white rounded-3xl p-6 max-w-3xl w-full max-h-[90vh] overflow-y-auto space-y-4">
-                              <div className="flex justify-between items-center"><h3 className="text-xl font-bold">Edit Destination Details</h3><button type="button" onClick={() => setEditingDestination(null)}><X /></button></div>
-                              <div className="grid sm:grid-cols-2 gap-3">
-                                {(['name', 'state', 'country', 'tagline', 'bestTimeToVisit', 'imageUrl'] as const).map((field) => (
-                                  <label key={field} className={labelCls}>{field}<input className={inputCls} value={editingDestination[field] || ''} onChange={(e) => setEditingDestination({ ...editingDestination, [field]: e.target.value })} /></label>
-                                ))}
-                                <label className={labelCls}>Description<textarea className={`${inputCls} h-24`} value={editingDestination.description} onChange={(e) => setEditingDestination({ ...editingDestination, description: e.target.value })} /></label>
-                                <label className={labelCls}>Highlights<input className={inputCls} value={editingDestination.highlights.join(', ')} onChange={(e) => setEditingDestination({ ...editingDestination, highlights: e.target.value.split(',').map((v) => v.trim()).filter(Boolean) })} /></label>
-                              </div>
-                              <button type="button" onClick={() => { updateDestination(editingDestination.id, editingDestination); setEditingDestination(null); showToast('Destination updated.'); }} className="px-5 py-2 rounded-full bg-[#9D3373] text-white text-xs font-bold uppercase">Save Changes</button>
-                            </div>
-                          </div>
-                      )}
                     </div>
                   ))}
                 </div>

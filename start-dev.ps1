@@ -25,7 +25,7 @@ if ($mongoProcess) {
 Write-Host ""
 
 # Start Backend (Spring Boot)
-Write-Host "[2/3] Starting Backend (Spring Boot on port 8080)..." -ForegroundColor Yellow
+Write-Host "[2/3] Starting Backend (Spring Boot on port 8001)..." -ForegroundColor Yellow
 $backendPath = Join-Path $PSScriptRoot "backend"
 Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd '$backendPath'; Write-Host 'Starting Spring Boot Backend...' -ForegroundColor Green; mvn spring-boot:run"
 Write-Host "✓ Backend starting in new window..." -ForegroundColor Green
@@ -42,7 +42,7 @@ Write-Host "========================================" -ForegroundColor Cyan
 Write-Host "  Development servers are starting!" -ForegroundColor Cyan
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host ""
-Write-Host "Backend:  http://localhost:8080/api" -ForegroundColor White
+Write-Host "Backend:  http://localhost:8001/api" -ForegroundColor White
 Write-Host "Frontend: http://localhost:3000" -ForegroundColor White
 Write-Host ""
 Write-Host "Note: Backend may take 30-60 seconds to fully start" -ForegroundColor Yellow

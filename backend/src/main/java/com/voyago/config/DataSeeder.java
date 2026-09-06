@@ -40,32 +40,28 @@ public class DataSeeder implements CommandLineRunner {
     }
 
     private void seedUsers() {
-        if (userRepository.count() > 0) return;
-        log.info("Seeding users...");
-        String pw = passwordEncoder.encode("password123");
-        userRepository.saveAll(List.of(
-            User.builder().id("usr-1").name("Arjun Sharma").email("arjun.sharma@example.com")
-                .passwordHash(pw).role("CUSTOMER").phone("+91 98765 43210")
-                .avatar("https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80")
-                .isActive(true).build(),
-            User.builder().id("usr-hp1").name("Rajesh Mehra").email("partner.taj@voyago.com")
-                .passwordHash(pw).role("HOTEL_PARTNER")
-                .partnerBusinessName("Taj Exotica Resort & Spa, Goa").phone("+91 832 6683333")
-                .partnerStatus("APPROVED").isActive(true)
-                .avatar("https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80")
-                .build(),
-            User.builder().id("usr-vp1").name("Vikram Singhania").email("partner.rides@voyago.com")
-                .passwordHash(pw).role("VEHICLE_PARTNER")
-                .partnerBusinessName("Goa Coastal Wheels & Rentals").phone("+91 99234 11223")
-                .partnerStatus("APPROVED").isActive(true)
-                .avatar("https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150&auto=format&fit=crop&q=80")
-                .build(),
-            User.builder().id("usr-admin").name("Devika Nair").email("admin@voyago.com")
-                .passwordHash(pw).role("ADMIN").phone("+91 91122 33445")
-                .isActive(true)
-                .avatar("https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150&auto=format&fit=crop&q=80")
-                .build()
-        ));
+        log.info("Ensuring demo users exist...");
+        ensureDemoUser("usr-demo-customer", "Demo Customer", "customer@gmail.com", "password123", "CUSTOMER", null);
+        ensureDemoUser("usr-demo-admin", "Demo Admin", "admin@gmail.com", "admin123", "ADMIN", null);
+        ensureDemoUser("usr-demo-hotel", "Demo Hotel Partner", "hotel@gmail.com", "hotel123", "HOTEL_PARTNER", "Voyago Demo Stays");
+        ensureDemoUser("usr-demo-vehicle", "Demo Vehicle Partner", "vehicle@gmail.com", "vehicle123", "VEHICLE_PARTNER", "Voyago Demo Rides");
+    }
+
+    private void ensureDemoUser(String id, String name, String email, String password, String role, String businessName) {
+        User user = userRepository.findByEmail(email).orElse(null);
+        if (user != null) {
+            return;
+        }
+        user = new User();
+        user.setId(id);
+        user.setName(name);
+        user.setEmail(email);
+        user.setPasswordHash(passwordEncoder.encode(password));
+        user.setRole(role);
+        user.setPartnerBusinessName(businessName);
+        user.setPartnerStatus("CUSTOMER".equals(role) || "ADMIN".equals(role) ? null : "APPROVED");
+        user.setActive(true);
+        userRepository.save(user);
     }
 
     private void seedDestinations() {

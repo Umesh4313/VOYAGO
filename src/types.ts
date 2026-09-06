@@ -21,6 +21,7 @@ export type TravelMode = 'FLIGHT' | 'TRAIN' | 'BUS';
 
 export interface TravelOption {
   id: string;
+  destinationId?: string;
   mode: TravelMode;
   operator: string;
   code: string;

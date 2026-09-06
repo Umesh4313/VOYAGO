@@ -3,6 +3,8 @@ import { Plane, ArrowLeft, ArrowRight, ShieldCheck, CheckCircle2 } from 'lucide-
 import { useApp } from '../../context/AppContext';
 import { UserRole } from '../../types';
 import { INITIAL_USERS } from '../../data/mockData';
+import authService from '../../services/authService';
+import axios from 'axios';
 
 export const AuthModal: React.FC = () => {
   const {
@@ -18,64 +20,122 @@ export const AuthModal: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'login' | 'signup'>(authModalInitialTab);
   const [selectedRole, setSelectedRole] = useState<UserRole>(authRoleToLogin || 'CUSTOMER');
   const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('••••••••');
+  const [password, setPassword] = useState('');
   const [name, setName] = useState('');
   const [rememberMe, setRememberMe] = useState(true);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [resetLink, setResetLink] = useState<string | null>(null);
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const resetToken = new URLSearchParams(window.location.search).get('resetToken');
+  const [authMode, setAuthMode] = useState<'login' | 'signup' | 'reset'>(resetToken ? 'reset' : authModalInitialTab);
 
   useEffect(() => {
     if (isAuthModalOpen) {
       setActiveTab(authModalInitialTab);
+      setAuthMode(resetToken ? 'reset' : authModalInitialTab);
       setSelectedRole(authRoleToLogin || 'CUSTOMER');
       setMessage(null);
+      setResetLink(null);
     }
-  }, [isAuthModalOpen, authModalInitialTab, authRoleToLogin]);
+  }, [isAuthModalOpen, authModalInitialTab, authRoleToLogin, resetToken]);
 
   if (!isAuthModalOpen) return null;
 
   const handleDemoFill = (role: UserRole) => {
+    const demoCredentials: Record<UserRole, { email: string; password: string }> = {
+      CUSTOMER: { email: 'customer@gmail.com', password: 'password123' },
+      ADMIN: { email: 'admin@gmail.com', password: 'admin123' },
+      HOTEL_PARTNER: { email: 'hotel@gmail.com', password: 'hotel123' },
+      VEHICLE_PARTNER: { email: 'vehicle@gmail.com', password: 'vehicle123' },
+    };
     const matched = INITIAL_USERS.find((u) => u.role === role);
     if (matched) {
       setSelectedRole(role);
-      setEmail(matched.email);
+      setEmail(demoCredentials[role].email);
       setName(matched.name);
-      setPassword('password123');
+      setPassword(demoCredentials[role].password);
     }
   };
 
-  const handleAuthSubmit = (e: React.FormEvent) => {
+  const getErrorMessage = (error: unknown) => {
+    if (axios.isAxiosError<{ error?: string }>(error)) {
+      return error.response?.data?.error || 'Unable to complete this request.';
+    }
+    return error instanceof Error ? error.message : 'Unable to complete this request.';
+  };
+
+  const handleAuthSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setMessage(null);
+    setResetLink(null);
+
+    if (authMode === 'reset') {
+      if (!resetToken) {
+        setMessage({ type: 'error', text: 'This reset link is invalid. Please request a new one.' });
+        return;
+      }
+      if (newPassword.length < 8 || newPassword !== confirmPassword) {
+        setMessage({ type: 'error', text: 'Use at least 8 characters and make both passwords match.' });
+        return;
+      }
+      try {
+        const response = await authService.resetPassword(resetToken, newPassword);
+        setMessage({ type: 'success', text: response.message });
+        window.history.replaceState({}, document.title, window.location.pathname);
+        setAuthMode('login');
+        setActiveTab('login');
+        setPassword('');
+        setNewPassword('');
+        setConfirmPassword('');
+      } catch (error) {
+        setMessage({ type: 'error', text: getErrorMessage(error) });
+      }
+      return;
+    }
+
     const userEmail = email.trim() || `${selectedRole.toLowerCase()}@voyago.com`;
     const userName = name.trim() || (selectedRole === 'CUSTOMER' ? 'Arjun Sharma' : `${selectedRole.replace('_', ' ')} Manager`);
-
-    const existingUser = INITIAL_USERS.find((u) => u.role === selectedRole);
-    const authenticatedUser = {
-      id: existingUser?.id || `usr-${Date.now()}`,
-      name: userName,
-      email: userEmail,
-      role: selectedRole,
-      phone: existingUser?.phone || '+91 98765 43210',
-      partnerBusinessName: existingUser?.partnerBusinessName,
-    };
-
-    setCurrentUser(authenticatedUser);
-    addAuditLog('USER_AUTHENTICATED', 'User', authenticatedUser.id, `User logged in with role ${selectedRole}`);
-
-    setMessage({ type: 'success', text: `Welcome back, ${userName}!` });
-
-    setTimeout(() => {
-      setIsAuthModalOpen(false);
-      setMessage(null);
-      if (selectedRole === 'HOTEL_PARTNER') {
-        setActiveView('hotel-partner');
-      } else if (selectedRole === 'VEHICLE_PARTNER') {
-        setActiveView('vehicle-partner');
-      } else if (selectedRole === 'ADMIN') {
-        setActiveView('admin');
-      } else {
-        setActiveView('customer');
+    try {
+      const response = activeTab === 'login'
+        ? await authService.login({ email: userEmail, password })
+        : await authService.register({ name: userName, email: userEmail, password, role: selectedRole });
+      if (activeTab === 'login' && response.role !== selectedRole) {
+        authService.logout();
+        setMessage({ type: 'error', text: `This account is for ${response.role.replace('_', ' ').toLowerCase()} access.` });
+        return;
       }
-    }, 600);
+      const authenticatedUser = {
+        id: response.userId,
+        name: response.name,
+        email: response.email,
+        role: response.role as UserRole,
+      };
+      setCurrentUser(authenticatedUser);
+      addAuditLog('USER_AUTHENTICATED', 'User', authenticatedUser.id, `User logged in with role ${authenticatedUser.role}`);
+      setMessage({ type: 'success', text: `Welcome back, ${response.name}!` });
+      setTimeout(() => {
+        setIsAuthModalOpen(false);
+        setMessage(null);
+        setActiveView(response.role === 'HOTEL_PARTNER' ? 'hotel-partner' : response.role === 'VEHICLE_PARTNER' ? 'vehicle-partner' : response.role === 'ADMIN' ? 'admin' : 'customer');
+      }, 600);
+    } catch (error) {
+      setMessage({ type: 'error', text: getErrorMessage(error) });
+    }
+  };
+
+  const handleForgotPassword = async () => {
+    if (!email.trim()) {
+      setMessage({ type: 'error', text: 'Enter your email first so we can find your account.' });
+      return;
+    }
+    try {
+      const response = await authService.requestPasswordReset(email.trim());
+      setResetLink(response.resetUrl || null);
+      setMessage({ type: 'success', text: `${response.message} Open the demo link below to choose a new password.` });
+    } catch (error) {
+      setMessage({ type: 'error', text: getErrorMessage(error) });
+    }
   };
 
   return (
@@ -156,23 +216,25 @@ export const AuthModal: React.FC = () => {
             {/* Top Eyebrow and Headline */}
             <div className="mb-6">
               <span className="text-[10px] font-bold text-[#9D3373] tracking-widest uppercase">
-                {activeTab === 'login' ? 'Authentication' : 'Membership Registration'}
+                {authMode === 'reset' ? 'Password recovery' : activeTab === 'login' ? 'Authentication' : 'Membership Registration'}
               </span>
               <h3 className="font-serif-display text-3xl font-light italic text-stone-900 mt-1">
-                {activeTab === 'login' ? 'Welcome back' : 'Begin your membership'}
+                {authMode === 'reset' ? 'Choose a new password' : activeTab === 'login' ? 'Welcome back' : 'Begin your membership'}
               </h3>
               <p className="text-stone-500 text-sm mt-1 font-light">
-                {activeTab === 'login'
+                {authMode === 'reset'
+                  ? 'Use a new password with at least 8 characters.'
+                  : activeTab === 'login'
                   ? 'Access your private reservations and travel portfolio.'
                   : 'Join Voyago to organize, reserve, and track bespoke voyages.'}
               </p>
             </div>
 
             {/* Login / Sign up Tabs */}
-            <div className="flex border-b border-stone-200 mb-6">
+            {authMode !== 'reset' && <div className="flex border-b border-stone-200 mb-6">
               <button
                 type="button"
-                onClick={() => setActiveTab('login')}
+                onClick={() => { setActiveTab('login'); setAuthMode('login'); }}
                 className={`pb-3 text-xs uppercase tracking-widest font-bold transition-colors relative flex-1 text-center cursor-pointer ${
                   activeTab === 'login'
                     ? 'text-[#9D3373] border-b-2 border-[#9D3373]'
@@ -184,7 +246,7 @@ export const AuthModal: React.FC = () => {
               </button>
               <button
                 type="button"
-                onClick={() => setActiveTab('signup')}
+                onClick={() => { setActiveTab('signup'); setAuthMode('signup'); }}
                 className={`pb-3 text-xs uppercase tracking-widest font-bold transition-colors relative flex-1 text-center cursor-pointer ${
                   activeTab === 'signup'
                     ? 'text-[#9D3373] border-b-2 border-[#9D3373]'
@@ -194,10 +256,10 @@ export const AuthModal: React.FC = () => {
               >
                 Sign up
               </button>
-            </div>
+            </div>}
 
             {/* Development-only shortcuts; production uses real credentials. */}
-            {import.meta.env.DEV && <div className="mb-6 bg-[#FAF8F5] p-3.5 rounded-2xl border border-stone-200">
+            {authMode !== 'reset' && import.meta.env.DEV && <div className="mb-6 bg-[#FAF8F5] p-3.5 rounded-2xl border border-stone-200">
               <p className="text-[10px] font-bold text-[#9D3373] uppercase tracking-widest mb-2 flex items-center gap-1.5">
                 <ShieldCheck className="w-3.5 h-3.5 text-[#9D3373]" />
                 <span>Instant Demo Login (Choose Role)</span>
@@ -251,7 +313,26 @@ export const AuthModal: React.FC = () => {
             </div>}
 
             {/* Form */}
-            <form onSubmit={handleAuthSubmit} className="space-y-4">
+            {authMode === 'reset' ? (
+              <form onSubmit={handleAuthSubmit} className="space-y-4">
+                <div>
+                  <label className="block text-[11px] font-bold text-stone-700 uppercase tracking-wider mb-1">New password</label>
+                  <input type="password" required minLength={8} value={newPassword} onChange={(e) => setNewPassword(e.target.value)} placeholder="At least 8 characters" className="w-full px-4 py-2.5 rounded-xl border border-stone-300 bg-white text-stone-900 text-sm focus:outline-none focus:border-[#9D3373] focus:ring-1 focus:ring-[#9D3373]" />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-stone-700 uppercase tracking-wider mb-1">Confirm new password</label>
+                  <input type="password" required minLength={8} value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} placeholder="Repeat your new password" className="w-full px-4 py-2.5 rounded-xl border border-stone-300 bg-white text-stone-900 text-sm focus:outline-none focus:border-[#9D3373] focus:ring-1 focus:ring-[#9D3373]" />
+                </div>
+                {message && (
+                  <div className={`p-3 rounded-xl text-xs flex items-center gap-2 ${message.type === 'success' ? 'bg-[#9D3373]/10 text-[#9D3373] border border-[#9D3373]/30' : 'bg-rose-50 text-rose-700 border border-rose-200'}`}>
+                    <CheckCircle2 className="w-4 h-4" /><span>{message.text}</span>
+                  </div>
+                )}
+                <button type="submit" className="w-full py-3.5 bg-[#9D3373] hover:bg-[#862960] text-white font-bold uppercase tracking-[0.15em] rounded-xl shadow-md text-xs flex items-center justify-center gap-2 transition-all mt-3 cursor-pointer">
+                  Set new password <ArrowRight className="w-4 h-4 stroke-[2.5]" />
+                </button>
+              </form>
+            ) : <form onSubmit={handleAuthSubmit} className="space-y-4">
               {activeTab === 'signup' && (
                 <div>
                   <label className="block text-[11px] font-bold text-stone-700 uppercase tracking-wider mb-1">
@@ -290,7 +371,7 @@ export const AuthModal: React.FC = () => {
                   {activeTab === 'login' && (
                     <button
                       type="button"
-                      onClick={() => alert('Password reset link sent to ' + (email || 'your email'))}
+                      onClick={handleForgotPassword}
                       className="text-xs font-semibold text-[#9D3373] hover:underline"
                     >
                       Forgot password?
@@ -343,14 +424,20 @@ export const AuthModal: React.FC = () => {
                 <span>{activeTab === 'login' ? 'Log in to Voyago' : 'Create Voyago Account'}</span>
                 <ArrowRight className="w-4 h-4 stroke-[2.5]" />
               </button>
-            </form>
+            </form>}
 
-            <div className="mt-6 text-center text-xs text-stone-500">
+            {resetLink && (
+              <a href={resetLink} className="mt-3 block rounded-xl bg-stone-100 p-3 text-xs font-semibold text-[#9D3373] break-all hover:underline">
+                Open demo reset link
+              </a>
+            )}
+
+            {authMode !== 'reset' && <div className="mt-6 text-center text-xs text-stone-500">
               {activeTab === 'login' ? (
                 <p>
                   Don't have an account?{' '}
                   <button
-                    onClick={() => setActiveTab('signup')}
+                    onClick={() => { setActiveTab('signup'); setAuthMode('signup'); }}
                     className="font-bold text-[#9D3373] hover:underline ml-1 cursor-pointer"
                   >
                     Sign up
@@ -360,14 +447,14 @@ export const AuthModal: React.FC = () => {
                 <p>
                   Already have an account?{' '}
                   <button
-                    onClick={() => setActiveTab('login')}
+                    onClick={() => { setActiveTab('login'); setAuthMode('login'); }}
                     className="font-bold text-[#9D3373] hover:underline ml-1 cursor-pointer"
                   >
                     Log in
                   </button>
                 </p>
               )}
-            </div>
+            </div>}
 
           </div>
 

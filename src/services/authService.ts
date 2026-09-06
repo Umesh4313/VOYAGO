@@ -25,6 +25,11 @@ export interface RegisterPayload {
   partnerBusinessName?: string;
 }
 
+export interface PasswordResetResponse {
+  message: string;
+  resetUrl?: string;
+}
+
 const TOKEN_KEY = 'voyago_token';
 const USER_KEY = 'voyago_user';
 
@@ -55,6 +60,16 @@ export const authService = {
 
   async getMe(): Promise<User> {
     const { data } = await apiClient.get<User>('/auth/me');
+    return data;
+  },
+
+  async requestPasswordReset(email: string): Promise<PasswordResetResponse> {
+    const { data } = await apiClient.post<PasswordResetResponse>('/auth/forgot-password', { email });
+    return data;
+  },
+
+  async resetPassword(token: string, password: string): Promise<PasswordResetResponse> {
+    const { data } = await apiClient.post<PasswordResetResponse>('/auth/reset-password', { token, password });
     return data;
   },
 

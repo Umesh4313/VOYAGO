@@ -164,7 +164,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     );
   });
 
-  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(() => (
+    typeof window !== 'undefined' && Boolean(new URLSearchParams(window.location.search).get('resetToken'))
+  ));
   const [authModalInitialTab, setAuthModalInitialTab] = useState<'login' | 'signup'>('login');
   const [authRoleToLogin, setAuthRoleToLogin] = useState<UserRole | undefined>(undefined);
   const [activeView, setActiveView] = useState<AppViewType>('home');

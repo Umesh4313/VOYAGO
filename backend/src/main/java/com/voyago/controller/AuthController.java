@@ -1,8 +1,10 @@
 package com.voyago.controller;
 
 import com.voyago.dto.AuthResponse;
+import com.voyago.dto.ForgotPasswordRequest;
 import com.voyago.dto.LoginRequest;
 import com.voyago.dto.RegisterRequest;
+import com.voyago.dto.ResetPasswordRequest;
 import com.voyago.model.User;
 import com.voyago.repository.UserRepository;
 import com.voyago.service.AuthService;
@@ -31,6 +33,16 @@ public class AuthController {
     @PostMapping("/login")
     public ResponseEntity<AuthResponse> login(@Valid @RequestBody LoginRequest request) {
         return ResponseEntity.ok(authService.login(request));
+    }
+
+    @PostMapping("/forgot-password")
+    public ResponseEntity<Map<String, String>> forgotPassword(@Valid @RequestBody ForgotPasswordRequest request) {
+        return ResponseEntity.ok(authService.forgotPassword(request));
+    }
+
+    @PostMapping("/reset-password")
+    public ResponseEntity<Map<String, String>> resetPassword(@Valid @RequestBody ResetPasswordRequest request) {
+        return ResponseEntity.ok(authService.resetPassword(request));
     }
 
     @GetMapping("/me")

@@ -65,6 +65,7 @@ export const TripPlannerModal: React.FC = () => {
   // Available options for current destination
   const destTravelOptions = useMemo(() => {
     return travelOptions.filter((t) => {
+      if (t.destinationId) return t.destinationId === currentDraft.destinationId;
       if (currentDraft.destinationName.toLowerCase() === 'goa') return t.id.includes('goa');
       if (currentDraft.destinationName.toLowerCase() === 'manali') return t.id.includes('manali');
       if (currentDraft.destinationName.toLowerCase() === 'jaipur') return t.id.includes('jaipur');
@@ -73,7 +74,7 @@ export const TripPlannerModal: React.FC = () => {
       if (currentDraft.destinationName.toLowerCase() === 'varanasi') return t.id.includes('varanasi');
       return true;
     });
-  }, [travelOptions, currentDraft.destinationName]);
+  }, [travelOptions, currentDraft.destinationId, currentDraft.destinationName]);
 
   const destHotels = useMemo(() => {
     return hotels.filter((h) => h.destinationId === currentDraft.destinationId);

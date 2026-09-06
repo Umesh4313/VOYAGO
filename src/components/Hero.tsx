@@ -44,8 +44,6 @@ export const Hero: React.FC = () => {
         <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/35 to-black/40" />
         <div className="absolute inset-0 bg-gradient-to-r from-black/40 via-transparent to-black/40" />
         <div className="hero-light-sweep absolute inset-0" />
-        <div className="home-float absolute top-24 left-[8%] hidden lg:block w-20 h-20 rounded-full border border-white/20 bg-white/10 backdrop-blur-sm" />
-        <div className="home-float absolute bottom-32 right-[10%] hidden lg:block w-12 h-12 rounded-full border border-[#E8A5C3]/40 bg-[#E8A5C3]/10 backdrop-blur-sm" />
 
         {/* Hero Content Container */}
         <div className="relative z-10 max-w-5xl mx-auto h-full flex flex-col justify-center items-center text-center px-4 sm:px-6 pt-8 pb-16">

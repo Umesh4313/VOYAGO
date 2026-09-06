@@ -1,8 +1,10 @@
 package com.voyago.service;
 
 import com.voyago.dto.AuthResponse;
+import com.voyago.dto.ForgotPasswordRequest;
 import com.voyago.dto.LoginRequest;
 import com.voyago.dto.RegisterRequest;
+import com.voyago.dto.ResetPasswordRequest;
 import com.voyago.model.User;
 import com.voyago.repository.UserRepository;
 import com.voyago.security.JwtTokenProvider;
@@ -12,6 +14,10 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+
+import java.time.LocalDateTime;
+import java.util.Map;
+import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
@@ -23,18 +29,19 @@ public class AuthService {
     private final AuthenticationManager authenticationManager;
 
     public AuthResponse register(RegisterRequest request) {
-        if (userRepository.existsByEmail(request.getEmail())) {
-            throw new RuntimeException("Email already in use: " + request.getEmail());
+        String email = request.getEmail().trim().toLowerCase();
+        if (userRepository.existsByEmail(email)) {
+            throw new RuntimeException("Email already in use. Please log in instead.");
         }
 
         User user = User.builder()
                 .name(request.getName())
-                .email(request.getEmail())
+                .email(email)
                 .passwordHash(passwordEncoder.encode(request.getPassword()))
-                .role(request.getRole())
+                .role("CUSTOMER")
                 .phone(request.getPhone())
-                .partnerBusinessName(request.getPartnerBusinessName())
-                .partnerStatus("CUSTOMER".equals(request.getRole()) ? null : "PENDING")
+                .partnerBusinessName(null)
+                .partnerStatus(null)
                 .build();
 
         User saved = userRepository.save(user);
@@ -51,16 +58,18 @@ public class AuthService {
     }
 
     public AuthResponse login(LoginRequest request) {
+        User user = userRepository.findByEmail(request.getEmail().trim().toLowerCase())
+                .orElseThrow(() -> new RuntimeException("No account found for this email. Please sign up first."));
+        if (!user.isActive()) {
+            throw new RuntimeException("This account is inactive. Please contact Voyago support.");
+        }
         try {
             authenticationManager.authenticate(
-                    new UsernamePasswordAuthenticationToken(request.getEmail(), request.getPassword())
+                    new UsernamePasswordAuthenticationToken(user.getEmail(), request.getPassword())
             );
         } catch (AuthenticationException e) {
-            throw new RuntimeException("Invalid email or password");
+            throw new RuntimeException("Incorrect password. Please try again.");
         }
-
-        User user = userRepository.findByEmail(request.getEmail())
-                .orElseThrow(() -> new RuntimeException("User not found"));
 
         String token = jwtTokenProvider.generateToken(user.getEmail(), user.getRole());
 
@@ -72,5 +81,34 @@ public class AuthService {
                 .email(user.getEmail())
                 .role(user.getRole())
                 .build();
+    }
+
+    public Map<String, String> forgotPassword(ForgotPasswordRequest request) {
+        User user = userRepository.findByEmail(request.getEmail().trim().toLowerCase())
+                .orElseThrow(() -> new RuntimeException("No account found for this email. Please sign up first."));
+        String token = UUID.randomUUID().toString();
+        user.setPasswordResetToken(token);
+        user.setPasswordResetTokenExpiresAt(LocalDateTime.now().plusMinutes(30));
+        userRepository.save(user);
+        return Map.of(
+                "message", "Demo reset email sent.",
+                "resetUrl", "http://localhost:3000/?resetToken=" + token
+        );
+    }
+
+    public Map<String, String> resetPassword(ResetPasswordRequest request) {
+        User user = userRepository.findAll().stream()
+                .filter(candidate -> request.getToken().equals(candidate.getPasswordResetToken()))
+                .findFirst()
+                .orElseThrow(() -> new RuntimeException("This reset link is invalid. Please request a new one."));
+        if (user.getPasswordResetTokenExpiresAt() == null
+                || user.getPasswordResetTokenExpiresAt().isBefore(LocalDateTime.now())) {
+            throw new RuntimeException("This reset link has expired. Please request a new one.");
+        }
+        user.setPasswordHash(passwordEncoder.encode(request.getPassword()));
+        user.setPasswordResetToken(null);
+        user.setPasswordResetTokenExpiresAt(null);
+        userRepository.save(user);
+        return Map.of("message", "Password updated successfully. You can now log in.");
     }
 }

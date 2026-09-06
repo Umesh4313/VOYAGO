@@ -8,7 +8,7 @@ $backendPath = Join-Path $PSScriptRoot "backend"
 Set-Location $backendPath
 
 Write-Host "Running: mvn spring-boot:run" -ForegroundColor Yellow
-Write-Host "Backend will be available at: http://localhost:8080/api" -ForegroundColor Green
+Write-Host "Backend will be available at: http://localhost:8001/api" -ForegroundColor Green
 Write-Host ""
 
 mvn spring-boot:run
