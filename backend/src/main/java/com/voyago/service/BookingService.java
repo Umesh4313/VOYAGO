@@ -25,16 +25,87 @@ public class BookingService {
     private final AuditLogRepository auditLogRepository;
 
     public List<Booking> getAll() {
-        return bookingRepository.findAll();
+        return autoCompletePastBookings(bookingRepository.findAll());
     }
 
     public List<Booking> getByUserId(String userId) {
-        return bookingRepository.findByUserIdOrderByCreatedAtDesc(userId);
+        return autoCompletePastBookings(bookingRepository.findByUserIdOrderByCreatedAtDesc(userId));
     }
 
+        public List<Booking> getByHotelPartner(String partnerId) {
+        List<String> hotelIds = hotelRepository.findByPartnerId(partnerId).stream()
+            .map(Hotel::getId)
+            .collect(Collectors.toList());
+        return autoCompletePastBookings(bookingRepository.findAll().stream()
+            .filter(booking -> booking.getHotel() != null && hotelIds.contains(booking.getHotel().getId()))
+            .collect(Collectors.toList()));
+        }
+
+        public List<Booking> getByVehiclePartner(String partnerId) {
+        List<String> vehicleIds = vehicleRepository.findByPartnerId(partnerId).stream()
+            .map(Vehicle::getId)
+            .collect(Collectors.toList());
+        return autoCompletePastBookings(bookingRepository.findAll().stream()
+            .filter(booking -> booking.getVehicle() != null && vehicleIds.contains(booking.getVehicle().getId()))
+            .collect(Collectors.toList()));
+        }
+
     public Booking getById(String id) {
-        return bookingRepository.findById(id)
+        Booking booking = bookingRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Booking not found: " + id));
+        return autoCompletePastBookings(List.of(booking)).get(0);
+    }
+
+    private List<Booking> autoCompletePastBookings(List<Booking> bookings) {
+        LocalDate today = LocalDate.now();
+        return bookings.stream().map(booking -> {
+            if (!"CONFIRMED".equals(booking.getStatus()) || booking.getReturnDate() == null) return booking;
+            try {
+                if (LocalDate.parse(booking.getReturnDate()).isBefore(today)) {
+                    booking.setStatus("COMPLETED");
+                    Booking completed = bookingRepository.save(booking);
+                    releaseCompletedInventory(completed);
+                    return completed;
+                }
+            } catch (java.time.format.DateTimeParseException ignored) {
+                // Leave malformed legacy dates unchanged for manual review.
+            }
+            return booking;
+        }).collect(Collectors.toList());
+    }
+
+    private void releaseCompletedInventory(Booking booking) {
+        if (booking.getHotel() != null) {
+            hotelRepository.findById(booking.getHotel().getId()).ifPresent(hotel -> {
+                hotel.setRooms(hotel.getRooms().stream().map(room -> {
+                    if (room.getId().equals(booking.getHotel().getRoomId())) {
+                        int total = room.getTotalUnits() > 0 ? room.getTotalUnits() : 8;
+                        room.setBookedUnits(Math.max(0, room.getBookedUnits() - 1));
+                        room.setAvailableCount(Math.min(total, room.getAvailableCount() + 1));
+                    }
+                    return room;
+                }).collect(Collectors.toList()));
+                hotelRepository.save(hotel);
+            });
+        }
+        if (booking.getVehicle() != null) {
+            vehicleRepository.findById(booking.getVehicle().getId()).ifPresent(vehicle -> {
+                vehicle.setAvailable(true);
+                vehicle.setRentalStatus("AVAILABLE");
+                vehicleRepository.save(vehicle);
+            });
+        }
+        if (booking.getTransport() != null && booking.getSelectedSeats() != null) {
+            travelOptionRepository.findById(booking.getTransport().getId()).ifPresent(transport -> {
+                List<String> occupied = transport.getOccupiedSeats() == null
+                        ? new java.util.ArrayList<>()
+                        : new java.util.ArrayList<>(transport.getOccupiedSeats());
+                occupied.removeAll(booking.getSelectedSeats());
+                transport.setOccupiedSeats(occupied);
+                transport.setAvailableSeats(transport.getAvailableSeats() + booking.getSelectedSeats().size());
+                travelOptionRepository.save(transport);
+            });
+        }
     }
 
     public synchronized Booking createBooking(BookingRequest req) {
@@ -53,52 +124,74 @@ public class BookingService {
         Hotel hotel = null;
         HotelRoom room = null;
         if (req.getHotelId() != null && req.getRoomId() != null) {
-            hotel = hotelRepository.findById(req.getHotelId()).orElse(null);
-            if (hotel != null) {
-                room = hotel.getRooms().stream()
-                        .filter(r -> r.getId().equals(req.getRoomId()))
-                        .findFirst().orElse(null);
-                if (room != null) {
-                    if (!room.isActive()) {
-                        throw new RuntimeException("Room '" + room.getName() + "' is inactive.");
-                    }
-                    validateRoomAvailability(req, hotel.getId(), room);
-                    hotelSnapshot = Booking.BookingHotel.builder()
-                            .id(hotel.getId())
-                            .name(hotel.getName())
-                            .roomId(room.getId())
-                            .roomType(room.getType())
-                            .roomName(room.getName())
-                            .pricePerNight(room.getPricePerNight())
-                            .nights(req.getDurationDays())
-                            .total(room.getPricePerNight() * req.getDurationDays())
-                            .address(hotel.getAddress())
-                            .build();
-                }
+            hotel = hotelRepository.findById(req.getHotelId()).orElseGet(() -> hotelRepository.findAll().stream()
+                .filter(candidate -> req.getHotelName() != null && candidate.getName().equalsIgnoreCase(req.getHotelName()))
+                .findFirst()
+                .orElseThrow(() -> new RuntimeException("Selected hotel is no longer available.")));
+            room = hotel.getRooms().stream()
+                .filter(candidate -> candidate.getId().equals(req.getRoomId())
+                    || (req.getRoomName() != null && candidate.getName().equalsIgnoreCase(req.getRoomName())))
+                .findFirst()
+                .orElse(null);
+            if (room == null && req.getHotelName() != null && req.getRoomName() != null) {
+            Hotel matchingHotel = hotelRepository.findAll().stream()
+                .filter(candidate -> candidate.getName().equalsIgnoreCase(req.getHotelName()))
+                .filter(candidate -> candidate.getRooms().stream()
+                    .anyMatch(candidateRoom -> candidateRoom.getName().equalsIgnoreCase(req.getRoomName())))
+                .findFirst()
+                .orElseThrow(() -> new RuntimeException("Selected room is no longer available."));
+            hotel = matchingHotel;
+            room = matchingHotel.getRooms().stream()
+                .filter(candidate -> candidate.getName().equalsIgnoreCase(req.getRoomName()))
+                .findFirst()
+                .orElseThrow(() -> new RuntimeException("Selected room is no longer available."));
             }
+            if (room == null) {
+            throw new RuntimeException("Selected room is no longer available.");
+            }
+            if (!room.isActive()) {
+                throw new RuntimeException("Room '" + room.getName() + "' is inactive.");
+            }
+            validateRoomAvailability(req, hotel.getId(), room);
+                double roomPrice = "NON_AC".equalsIgnoreCase(req.getRoomCondition())
+                    ? (room.getNonAcPricePerNight() != null ? room.getNonAcPricePerNight() : room.getPricePerNight() * 0.8)
+                    : room.getPricePerNight();
+            hotelSnapshot = Booking.BookingHotel.builder()
+                    .id(hotel.getId())
+                    .name(hotel.getName())
+                    .roomId(room.getId())
+                    .roomType(room.getType())
+                    .roomName(room.getName())
+                    .pricePerNight(roomPrice)
+                    .condition(req.getRoomCondition())
+                    .nights(req.getDurationDays())
+                    .total(roomPrice * req.getDurationDays())
+                    .address(hotel.getAddress())
+                    .build();
+        } else if (req.getHotelId() != null || req.getRoomId() != null) {
+            throw new RuntimeException("Both a hotel and room must be selected.");
         }
 
         // Resolve vehicle snapshot
         Booking.BookingVehicle vehicleSnapshot = null;
         Vehicle vehicle = null;
         if (req.getVehicleId() != null && !req.getVehicleId().isBlank()) {
-            vehicle = vehicleRepository.findById(req.getVehicleId()).orElse(null);
-            if (vehicle != null) {
-                if (!vehicle.isAvailable() && !"AVAILABLE".equals(vehicle.getRentalStatus())) {
-                    throw new RuntimeException("Vehicle '" + vehicle.getName() + "' is not available.");
-                }
-                if (hasOverlappingVehicleBooking(req, vehicle.getId())) {
-                    throw new RuntimeException("Vehicle '" + vehicle.getName() + "' is not available.");
-                }
-                vehicleSnapshot = Booking.BookingVehicle.builder()
-                        .id(vehicle.getId())
-                        .name(vehicle.getName())
-                        .type(vehicle.getType())
-                        .dailyRate(vehicle.getDailyRate())
-                        .days(req.getDurationDays())
-                        .total(vehicle.getDailyRate() * req.getDurationDays())
-                        .build();
+            vehicle = vehicleRepository.findById(req.getVehicleId())
+                    .orElseThrow(() -> new RuntimeException("Selected vehicle is no longer available."));
+            if (!vehicle.isAvailable() && !"AVAILABLE".equals(vehicle.getRentalStatus())) {
+                throw new RuntimeException("Vehicle '" + vehicle.getName() + "' is not available.");
             }
+            if (hasOverlappingVehicleBooking(req, vehicle.getId())) {
+                throw new RuntimeException("Vehicle '" + vehicle.getName() + "' is not available.");
+            }
+            vehicleSnapshot = Booking.BookingVehicle.builder()
+                    .id(vehicle.getId())
+                    .name(vehicle.getName())
+                    .type(vehicle.getType())
+                    .dailyRate(vehicle.getDailyRate())
+                    .days(req.getDurationDays())
+                    .total(vehicle.getDailyRate() * req.getDurationDays())
+                    .build();
         }
 
         // Resolve tourist places
@@ -309,6 +402,22 @@ public class BookingService {
                 .build());
 
         return booking;
+    }
+
+    public Booking updateStatus(String bookingId, String status) {
+        String normalizedStatus = status == null ? "" : status.trim().toUpperCase();
+        if (!List.of("CONFIRMED", "COMPLETED", "CANCELLED").contains(normalizedStatus)) {
+            throw new RuntimeException("Unsupported booking status: " + status);
+        }
+        Booking booking = getById(bookingId);
+        if ("CANCELLED".equals(normalizedStatus)) {
+            return cancelBooking(bookingId);
+        }
+        if ("CANCELLED".equals(booking.getStatus())) {
+            throw new RuntimeException("A cancelled booking cannot be reopened.");
+        }
+        booking.setStatus(normalizedStatus);
+        return bookingRepository.save(booking);
     }
 
     public long countByStatus(String status) {

@@ -64,6 +64,7 @@ export const CustomerPortal: React.FC = () => {
     startNewTrip,
     setIsPlannerOpen,
     setActiveView,
+    updateProfile,
     customerActiveTab,
     setCustomerActiveTab,
   } = useApp();
@@ -81,6 +82,8 @@ export const CustomerPortal: React.FC = () => {
   const [profileName, setProfileName] = useState(currentUser?.name || 'Arjun Sharma');
   const [profileEmail, setProfileEmail] = useState(currentUser?.email || 'arjun.sharma@example.com');
   const [profilePhone, setProfilePhone] = useState(currentUser?.phone || '+91 98765 43210');
+  const [profileCity, setProfileCity] = useState(currentUser?.city || '');
+  const [profileState, setProfileState] = useState(currentUser?.state || '');
   const [profileSavedMsg, setProfileSavedMsg] = useState(false);
 
   // Settings state
@@ -93,13 +96,14 @@ export const CustomerPortal: React.FC = () => {
   const customerSavedItems = savedItems.filter((item) => item.userId === currentUser.id);
   const unreadNotifsCount = customerNotifications.filter((n) => !n.isRead).length;
 
-  const handleSaveProfile = (e: React.FormEvent) => {
+  const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
-    setCurrentUser({
-      ...currentUser,
+    await updateProfile({
       name: profileName,
       email: profileEmail,
       phone: profilePhone,
+      city: profileCity,
+      state: profileState,
     });
     setProfileSavedMsg(true);
     setTimeout(() => setProfileSavedMsg(false), 3000);
@@ -472,6 +476,17 @@ export const CustomerPortal: React.FC = () => {
                     <p className="text-xs text-stone-500">
                       Coordinated schedules with interactive seat selection
                     </p>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-[11px] font-bold uppercase tracking-wider text-stone-600 block mb-1.5">City</label>
+                      <input type="text" value={profileCity} onChange={(e) => setProfileCity(e.target.value)} className="w-full bg-[#FAF8F5] border border-stone-200 rounded-xl px-4 py-2.5 text-xs text-stone-900 focus:outline-none focus:border-[#9D3373]" required />
+                    </div>
+                    <div>
+                      <label className="text-[11px] font-bold uppercase tracking-wider text-stone-600 block mb-1.5">State</label>
+                      <input type="text" value={profileState} onChange={(e) => setProfileState(e.target.value)} className="w-full bg-[#FAF8F5] border border-stone-200 rounded-xl px-4 py-2.5 text-xs text-stone-900 focus:outline-none focus:border-[#9D3373]" required />
+                    </div>
                   </div>
 
                   {/* Filter Pills */}

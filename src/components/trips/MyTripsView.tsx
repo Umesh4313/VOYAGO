@@ -11,13 +11,14 @@ import {
   ArrowRight,
   ShieldCheck,
   CreditCard,
+  Home,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { Booking } from '../../types';
 import { getBookingStatus } from '../../utils/bookingStatus';
 
 export const MyTripsView: React.FC = () => {
-  const { bookings, currentUser, startNewTrip, setActiveView } = useApp();
+  const { bookings, currentUser, startNewTrip, setActiveView, setCustomerActiveTab } = useApp();
   const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null);
 
   // Filter bookings for current customer (or all if admin/viewing)
@@ -41,14 +42,27 @@ export const MyTripsView: React.FC = () => {
             </p>
           </div>
 
-          <button
-            onClick={() => startNewTrip()}
-            className="px-6 py-2.5 bg-[#9D3373] hover:bg-[#862960] text-white font-bold uppercase tracking-wider rounded-full shadow-2xs text-xs flex items-center gap-2 self-start sm:self-auto transition-all"
-            id="my-trips-plan-new-btn"
-          >
-            <Compass className="w-4 h-4" />
-            <span>Plan New Journey</span>
-          </button>
+          <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
+            <button
+              onClick={() => {
+                setCustomerActiveTab('dashboard');
+                setActiveView('customer');
+              }}
+              className="px-5 py-2.5 bg-white hover:bg-stone-100 border border-stone-200 text-stone-700 font-bold uppercase tracking-wider rounded-full shadow-2xs text-xs flex items-center gap-2 transition-all"
+              id="my-trips-dashboard-btn"
+            >
+              <Home className="w-4 h-4 text-[#9D3373]" />
+              <span>Dashboard</span>
+            </button>
+            <button
+              onClick={() => startNewTrip()}
+              className="px-6 py-2.5 bg-[#9D3373] hover:bg-[#862960] text-white font-bold uppercase tracking-wider rounded-full shadow-2xs text-xs flex items-center gap-2 transition-all"
+              id="my-trips-plan-new-btn"
+            >
+              <Compass className="w-4 h-4" />
+              <span>Plan New Journey</span>
+            </button>
+          </div>
         </div>
 
         {/* Trips List or Empty State */}

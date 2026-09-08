@@ -29,6 +29,8 @@ public class TravelOption {
 
     private String toCity;
 
+    private String destinationId;
+
     private String departureTime;
 
     private String arrivalTime;

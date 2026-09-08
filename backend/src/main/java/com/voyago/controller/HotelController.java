@@ -39,19 +39,19 @@ public class HotelController {
     }
 
     @PostMapping
-    @PreAuthorize("hasAnyRole('HOTEL_PARTNER', 'ADMIN')")
+    @PreAuthorize("hasAnyRole('HOTEL_PARTNER', 'ADMIN') and @partnerApproval.isApproved(authentication)")
     public ResponseEntity<Hotel> create(@RequestBody Hotel hotel) {
         return ResponseEntity.ok(hotelService.create(hotel));
     }
 
     @PutMapping("/{id}")
-    @PreAuthorize("hasAnyRole('HOTEL_PARTNER', 'ADMIN')")
+    @PreAuthorize("hasAnyRole('HOTEL_PARTNER', 'ADMIN') and @partnerApproval.isApproved(authentication)")
     public ResponseEntity<Hotel> update(@PathVariable String id, @RequestBody Hotel hotel) {
         return ResponseEntity.ok(hotelService.update(id, hotel));
     }
 
     @PatchMapping("/{hotelId}/rooms/{roomId}/price")
-    @PreAuthorize("hasAnyRole('HOTEL_PARTNER', 'ADMIN')")
+    @PreAuthorize("hasAnyRole('HOTEL_PARTNER', 'ADMIN') and @partnerApproval.isApproved(authentication)")
     public ResponseEntity<Hotel> updateRoomPrice(
             @PathVariable String hotelId,
             @PathVariable String roomId,
@@ -61,7 +61,7 @@ public class HotelController {
     }
 
     @PatchMapping("/{hotelId}/rooms/{roomId}/toggle")
-    @PreAuthorize("hasAnyRole('HOTEL_PARTNER', 'ADMIN')")
+    @PreAuthorize("hasAnyRole('HOTEL_PARTNER', 'ADMIN') and @partnerApproval.isApproved(authentication)")
     public ResponseEntity<Hotel> toggleRoomAvailability(
             @PathVariable String hotelId,
             @PathVariable String roomId) {
@@ -69,7 +69,7 @@ public class HotelController {
     }
 
     @PostMapping("/{hotelId}/rooms")
-    @PreAuthorize("hasAnyRole('HOTEL_PARTNER', 'ADMIN')")
+    @PreAuthorize("hasAnyRole('HOTEL_PARTNER', 'ADMIN') and @partnerApproval.isApproved(authentication)")
     public ResponseEntity<Hotel> addRoom(@PathVariable String hotelId, @RequestBody HotelRoom room) {
         Hotel hotel = hotelService.getById(hotelId);
         room.setId("rm-" + System.currentTimeMillis());

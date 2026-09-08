@@ -25,6 +25,7 @@ import {
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { HotelRoom } from '../../types';
+import { HotelPartnerAnalytics } from './HotelPartnerAnalytics';
 
 type HotelTab =
   | 'dashboard'
@@ -44,11 +45,13 @@ type RevenuePeriod = 'current' | 'last-month' | 'last-year';
 export const HotelPartnerDashboard: React.FC = () => {
   const {
     currentUser,
+    destinations,
     hotels,
     bookings,
     updateHotelRoomPrice,
     updateHotelRoomDetails,
     toggleHotelRoomAvailability,
+    addHotelRoomType,
     logout,
     notifications,
     addNotification,
@@ -62,6 +65,9 @@ export const HotelPartnerDashboard: React.FC = () => {
 
   const [activeTab, setActiveTab] = useState<HotelTab>('dashboard');
   const [revenuePeriod, setRevenuePeriod] = useState<RevenuePeriod>('current');
+  const [selectedMonth, setSelectedMonth] = useState<number>(new Date().getMonth() + 1);
+  const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
+  const [photoUploadMode, setPhotoUploadMode] = useState<'url' | 'device'>('url');
 
   // Room pricing state
   const [editingRoomId, setEditingRoomId] = useState<string | null>(null);
@@ -79,10 +85,35 @@ export const HotelPartnerDashboard: React.FC = () => {
   const [newRoomBed, setNewRoomBed] = useState('1 King Bed');
   const [newRoomMaxGuests, setNewRoomMaxGuests] = useState(2);
   const [newRoomRate, setNewRoomRate] = useState(14500);
+  const [newRoomNonAcRate, setNewRoomNonAcRate] = useState(11600);
+  const [newRoomIsAC, setNewRoomIsAC] = useState(true);
   const [newRoomTotalUnits, setNewRoomTotalUnits] = useState(10);
   const [newRoomImage, setNewRoomImage] = useState(
     'https://images.unsplash.com/photo-1590490360182-c33d57733427?w=600&auto=format&fit=crop&q=80'
   );
+  const [newRoomGallery, setNewRoomGallery] = useState<string[]>([]);
+
+  const readRoomImages = (files: FileList | null) => {
+    if (!files) return;
+    Array.from(files).slice(0, 4).forEach((file) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const image = String(reader.result || '');
+        setNewRoomGallery((previous) => [...previous.filter((item) => item !== image), image].slice(0, 4));
+        setNewRoomImage((previous) => previous || image);
+      };
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const addPhotoFromURL = (url: string) => {
+    if (url.trim()) {
+      setNewRoomGallery((previous) => [...previous.filter((item) => item !== url), url].slice(0, 4));
+      if (!newRoomImage || newRoomImage.includes('unsplash')) {
+        setNewRoomImage(url);
+      }
+    }
+  };
 
   // Hotel property details state
   const [propName, setPropName] = useState(myHotel?.name || '');
@@ -90,6 +121,7 @@ export const HotelPartnerDashboard: React.FC = () => {
   const [propDesc, setPropDesc] = useState(myHotel?.description || '');
   const [propPhone, setPropPhone] = useState('+91 832 6683333');
   const [propEmail, setPropEmail] = useState('taj.goa@partner.voyago.com');
+  const [propertyDestinationId, setPropertyDestinationId] = useState('dest-goa');
 
   if (!myHotel) {
     return (
@@ -111,8 +143,8 @@ export const HotelPartnerDashboard: React.FC = () => {
                 }
                 addHotel({
                   name: propName.trim(),
-                  destinationId: 'dest-goa',
-                  destinationName: 'Goa',
+                  destinationId: propertyDestinationId,
+                  destinationName: destinations.find((destination) => destination.id === propertyDestinationId)?.name || '',
                   rating: 0,
                   reviewCount: 0,
                   address: propAddress.trim(),
@@ -125,6 +157,7 @@ export const HotelPartnerDashboard: React.FC = () => {
                   priceStartsFrom: 0,
                   rooms: [],
                   status: 'INACTIVE',
+                  approvalStatus: 'PENDING',
                 });
               }}
             >
@@ -135,6 +168,12 @@ export const HotelPartnerDashboard: React.FC = () => {
               <label className="block text-sm font-semibold text-stone-700">
                 Address
                 <input className="mt-1 w-full rounded-xl border border-stone-300 px-4 py-3" value={propAddress} onChange={(event) => setPropAddress(event.target.value)} required />
+              </label>
+              <label className="block text-sm font-semibold text-stone-700">
+                Destination
+                <select className="mt-1 w-full rounded-xl border border-stone-300 px-4 py-3" value={propertyDestinationId} onChange={(event) => setPropertyDestinationId(event.target.value)} required>
+                  {destinations.map((destination) => <option key={destination.id} value={destination.id}>{destination.name}</option>)}
+                </select>
               </label>
               <label className="block text-sm font-semibold text-stone-700">
                 Description
@@ -150,6 +189,84 @@ export const HotelPartnerDashboard: React.FC = () => {
               </div>
             </form>
             {toast && <p className="mt-4 text-sm text-[#9D3373]">{toast}</p>}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Check for approval status
+  if (myHotel?.approvalStatus === 'PENDING') {
+    return (
+      <div className="max-w-4xl mx-auto px-6 py-16">
+        <div className="bg-white border border-stone-200 rounded-3xl p-6 md:p-10 shadow-xs">
+          <div className="max-w-2xl mx-auto text-center">
+            <div className="w-16 h-16 rounded-full bg-amber-100 border-2 border-amber-400 mx-auto mb-6 flex items-center justify-center">
+              <Clock className="w-8 h-8 text-amber-600" />
+            </div>
+            <h1 className="text-3xl font-bold text-stone-900">Waiting for Admin Approval</h1>
+            <p className="mt-4 text-stone-600 font-light">
+              Thank you for registering <strong>{myHotel.name}</strong> with Voyago!
+            </p>
+            <p className="mt-2 text-stone-500 text-sm">
+              Your hotel property is currently under review by our admin team. This typically takes 24-48 hours.
+            </p>
+            <div className="mt-8 p-6 rounded-2xl bg-amber-50 border border-amber-200">
+              <p className="text-sm text-amber-900">
+                <strong>What happens next?</strong>
+              </p>
+              <ul className="mt-3 text-sm text-amber-800 space-y-2">
+                <li>✓ Our team will verify your property details</li>
+                <li>✓ We'll contact you if we need additional information</li>
+                <li>✓ Once approved, you'll receive an email notification</li>
+                <li>✓ You can then start adding rooms and managing bookings</li>
+              </ul>
+            </div>
+            <div className="mt-8 flex gap-3 justify-center">
+              <button
+                type="button"
+                onClick={logout}
+                className="px-6 py-3 rounded-full bg-stone-200 hover:bg-stone-300 text-stone-700 font-bold text-sm transition-colors"
+              >
+                Return to Customer Portal
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (myHotel?.approvalStatus === 'REJECTED') {
+    return (
+      <div className="max-w-4xl mx-auto px-6 py-16">
+        <div className="bg-white border border-stone-200 rounded-3xl p-6 md:p-10 shadow-xs">
+          <div className="max-w-2xl mx-auto text-center">
+            <div className="w-16 h-16 rounded-full bg-rose-100 border-2 border-rose-400 mx-auto mb-6 flex items-center justify-center">
+              <X className="w-8 h-8 text-rose-600" />
+            </div>
+            <h1 className="text-3xl font-bold text-stone-900">Application Rejected</h1>
+            <p className="mt-4 text-stone-600 font-light">
+              Unfortunately, your application for <strong>{myHotel.name}</strong> could not be approved.
+            </p>
+            {myHotel?.rejectionReason && (
+              <div className="mt-6 p-4 rounded-xl bg-rose-50 border border-rose-200 text-left">
+                <p className="text-xs font-semibold text-rose-900 mb-2">REASON:</p>
+                <p className="text-sm text-rose-800">{myHotel.rejectionReason}</p>
+              </div>
+            )}
+            <p className="mt-6 text-stone-500 text-sm">
+              Please contact our support team for more information or to reapply.
+            </p>
+            <div className="mt-8 flex gap-3 justify-center">
+              <button
+                type="button"
+                onClick={logout}
+                className="px-6 py-3 rounded-full bg-stone-200 hover:bg-stone-300 text-stone-700 font-bold text-sm transition-colors"
+              >
+                Return to Customer Portal
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -191,27 +308,30 @@ export const HotelPartnerDashboard: React.FC = () => {
     setRoomGuests(room.maxGuests);
   };
 
-  const handleAddRoom = (e: React.FormEvent) => {
+  const handleAddRoom = async (e: React.FormEvent) => {
     e.preventDefault();
-    const newRoom: HotelRoom = {
-      id: `room-${Date.now()}`,
+    const newRoom: Omit<HotelRoom, 'id' | 'availableCount'> = {
       name: newRoomName,
       type: newRoomType,
       bedType: newRoomBed,
       maxGuests: Number(newRoomMaxGuests),
       pricePerNight: Number(newRoomRate),
+      nonAcPricePerNight: newRoomIsAC ? undefined : Number(newRoomNonAcRate),
       totalUnits: Number(newRoomTotalUnits),
       bookedUnits: 0,
-      availableCount: Number(newRoomTotalUnits),
       amenities: ['Ocean View', 'Balcony', 'King Size Bed', 'Complimentary Breakfast', 'Free Wi-Fi'],
       imageUrl: newRoomImage,
+      gallery: newRoomGallery,
+      bathroomImageUrl: newRoomGallery[1],
+      viewImageUrl: newRoomGallery[2],
+      isAC: newRoomIsAC,
     };
 
-    myHotel.rooms.push(newRoom);
+    await addHotelRoomType(myHotel.id, newRoom);
     addNotification({
       userId: currentUser.id,
       title: 'New Room Added',
-      message: `Successfully created "${newRoomName}" with ${newRoomTotalUnits} total units.`,
+      message: `Successfully created "${newRoomName}" (${newRoomIsAC ? 'AC' : 'Non-AC'}) with ${newRoomTotalUnits} total units.`,
       type: 'PARTNER_UPDATE',
     });
 
@@ -219,6 +339,7 @@ export const HotelPartnerDashboard: React.FC = () => {
     setTimeout(() => setToast(null), 3000);
     setActiveTab('rooms');
     setNewRoomName('');
+    setNewRoomGallery([]);
   };
 
   const handleSaveHotelDetails = (e: React.FormEvent) => {
@@ -736,20 +857,6 @@ export const HotelPartnerDashboard: React.FC = () => {
 
                     <div>
                       <label className="text-[11px] font-bold uppercase tracking-wider text-stone-700 block mb-1.5">
-                        Night Rate (₹)
-                      </label>
-                      <input
-                        type="number"
-                        min="1000"
-                        step="500"
-                        value={newRoomRate}
-                        onChange={(e) => setNewRoomRate(Number(e.target.value))}
-                        className="w-full bg-white border border-stone-300 rounded-xl px-4 py-2.5 text-xs text-stone-900 focus:outline-none focus:border-[#9D3373]"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="text-[11px] font-bold uppercase tracking-wider text-stone-700 block mb-1.5">
                         Total Units
                       </label>
                       <input
@@ -761,18 +868,154 @@ export const HotelPartnerDashboard: React.FC = () => {
                         className="w-full bg-white border border-stone-300 rounded-xl px-4 py-2.5 text-xs text-stone-900 focus:outline-none focus:border-[#9D3373]"
                       />
                     </div>
+
+                    <div>
+                      <label className="text-[11px] font-bold uppercase tracking-wider text-stone-700 block mb-1.5">
+                        AC / Non-AC
+                      </label>
+                      <select
+                        value={newRoomIsAC ? 'AC' : 'NON_AC'}
+                        onChange={(e) => setNewRoomIsAC(e.target.value === 'AC')}
+                        className="w-full bg-white border border-stone-300 rounded-xl px-4 py-2.5 text-xs text-stone-900 focus:outline-none focus:border-[#9D3373]"
+                      >
+                        <option value="AC">AC Room</option>
+                        <option value="NON_AC">Non-AC Room</option>
+                      </select>
+                    </div>
                   </div>
 
-                  <div>
-                    <label className="text-[11px] font-bold uppercase tracking-wider text-stone-700 block mb-1.5">
-                      Room Photo URL
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="text-[11px] font-bold uppercase tracking-wider text-stone-700 block mb-1.5">
+                        Night Rate (₹)
+                      </label>
+                      <input
+                        type="number"
+                        min="1000"
+                        step="500"
+                        value={newRoomRate}
+                        onChange={(e) => setNewRoomRate(Number(e.target.value))}
+                        className="w-full bg-white border border-stone-300 rounded-xl px-4 py-2.5 text-xs text-stone-900 focus:outline-none focus:border-[#9D3373]"
+                        placeholder="AC room price"
+                      />
+                    </div>
+
+                    {!newRoomIsAC && (
+                      <div>
+                        <label className="text-[11px] font-bold uppercase tracking-wider text-stone-700 block mb-1.5">
+                          Non-AC Rate (₹)
+                        </label>
+                        <input
+                          type="number"
+                          min="1000"
+                          step="500"
+                          value={newRoomNonAcRate}
+                          onChange={(e) => setNewRoomNonAcRate(Number(e.target.value))}
+                          className="w-full bg-white border border-stone-300 rounded-xl px-4 py-2.5 text-xs text-stone-900 focus:outline-none focus:border-[#9D3373]"
+                          placeholder="Non-AC price"
+                        />
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Photo Upload Section */}
+                  <div className="border-t border-stone-200 pt-4">
+                    <label className="text-[11px] font-bold uppercase tracking-wider text-stone-700 block mb-3">
+                      📸 Room Photos (Upload up to 4)
                     </label>
-                    <input
-                      type="url"
-                      value={newRoomImage}
-                      onChange={(e) => setNewRoomImage(e.target.value)}
-                      className="w-full bg-white border border-stone-300 rounded-xl px-4 py-2.5 text-xs text-stone-900 focus:outline-none focus:border-[#9D3373]"
-                    />
+                    
+                    <div className="flex gap-2 mb-4">
+                      <button
+                        type="button"
+                        onClick={() => setPhotoUploadMode('device')}
+                        className={`flex-1 px-3 py-2 rounded-lg text-xs font-bold uppercase transition-all ${
+                          photoUploadMode === 'device'
+                            ? 'bg-[#9D3373] text-white'
+                            : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
+                        }`}
+                      >
+                        Upload from Device
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setPhotoUploadMode('url')}
+                        className={`flex-1 px-3 py-2 rounded-lg text-xs font-bold uppercase transition-all ${
+                          photoUploadMode === 'url'
+                            ? 'bg-[#9D3373] text-white'
+                            : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
+                        }`}
+                      >
+                        Add from URL
+                      </button>
+                    </div>
+
+                    {photoUploadMode === 'device' && (
+                      <label className="block">
+                        <input
+                          type="file"
+                          accept="image/*"
+                          multiple
+                          onChange={(e) => readRoomImages(e.target.files)}
+                          className="block w-full text-xs text-stone-600 file:mr-3 file:px-3 file:py-2 file:rounded-lg file:text-xs file:font-bold file:bg-[#9D3373]/10 file:text-[#9D3373] file:border-0 cursor-pointer"
+                        />
+                        <p className="text-[10px] text-stone-500 mt-1">Select up to 4 images</p>
+                      </label>
+                    )}
+
+                    {photoUploadMode === 'url' && (
+                      <div className="space-y-2">
+                        <input
+                          type="url"
+                          placeholder="Paste image URL here..."
+                          className="w-full bg-white border border-stone-300 rounded-xl px-4 py-2.5 text-xs text-stone-900 focus:outline-none focus:border-[#9D3373]"
+                          onKeyPress={(e) => {
+                            if (e.key === 'Enter' && (e.target as HTMLInputElement).value.trim()) {
+                              addPhotoFromURL((e.target as HTMLInputElement).value.trim());
+                              (e.target as HTMLInputElement).value = '';
+                            }
+                          }}
+                        />
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            const input = (e.currentTarget.parentElement?.querySelector('input') as HTMLInputElement);
+                            if (input && input.value.trim()) {
+                              addPhotoFromURL(input.value.trim());
+                              input.value = '';
+                            }
+                          }}
+                          className="w-full px-3 py-2 rounded-lg bg-[#9D3373]/10 text-[#9D3373] text-xs font-bold hover:bg-[#9D3373]/20 transition-all"
+                        >
+                          Add URL to Gallery
+                        </button>
+                      </div>
+                    )}
+
+                    {newRoomGallery.length > 0 && (
+                      <div className="mt-4">
+                        <p className="text-[10px] font-bold text-stone-600 mb-2">
+                          Photos added: {newRoomGallery.length}/4
+                        </p>
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                          {newRoomGallery.map((image, index) => (
+                            <div key={`${image}-${index}`} className="relative group">
+                              <img
+                                src={image}
+                                alt={`Room photo ${index + 1}`}
+                                className="w-full aspect-square rounded-lg object-cover border border-stone-200"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => setNewRoomGallery((prev) => prev.filter((_, i) => i !== index))}
+                                className="absolute top-1 right-1 p-1 rounded-full bg-rose-500 text-white opacity-0 group-hover:opacity-100 transition-opacity"
+                              >
+                                <X className="w-3 h-3" />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   <div className="pt-4 flex items-center gap-3">
@@ -837,13 +1080,39 @@ export const HotelPartnerDashboard: React.FC = () => {
             {/* TAB 6: VIEW BOOKINGS */}
             {activeTab === 'bookings' && (
               <div className="space-y-6 animate-in fade-in">
-                <div>
-                  <h3 className="font-serif-display text-3xl font-light italic text-stone-900">
-                    Guest Bookings &amp; Arrival History
-                  </h3>
-                  <p className="text-xs text-stone-500">
-                    Confirmed guest reservations booked through VOYAGO
-                  </p>
+                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                  <div>
+                    <h3 className="font-serif-display text-3xl font-light italic text-stone-900">
+                      Guest Bookings &amp; Arrival History
+                    </h3>
+                    <p className="text-xs text-stone-500">
+                      Confirmed guest reservations booked through VOYAGO
+                    </p>
+                  </div>
+                  <div className="flex gap-3">
+                    <select
+                      value={selectedMonth}
+                      onChange={(e) => setSelectedMonth(Number(e.target.value))}
+                      className="px-3 py-2 rounded-lg border border-stone-300 text-xs font-semibold text-stone-700 bg-white"
+                    >
+                      {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => (
+                        <option key={m} value={m}>
+                          {new Date(2026, m - 1).toLocaleString('default', { month: 'long' })}
+                        </option>
+                      ))}
+                    </select>
+                    <select
+                      value={selectedYear}
+                      onChange={(e) => setSelectedYear(Number(e.target.value))}
+                      className="px-3 py-2 rounded-lg border border-stone-300 text-xs font-semibold text-stone-700 bg-white"
+                    >
+                      {[2024, 2025, 2026, 2027].map((y) => (
+                        <option key={y} value={y}>
+                          {y}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
 
                 {hotelBookings.length === 0 ? (
@@ -869,6 +1138,9 @@ export const HotelPartnerDashboard: React.FC = () => {
                           <p className="text-xs text-stone-500 mt-0.5">
                             Check-in: {b.departureDate} → Check-out: {b.returnDate} ({b.hotel?.nights} Nights)
                           </p>
+                          <p className="text-xs text-stone-500 mt-1">
+                            Guest: {b.customerEmail} • {b.customerPhone || 'Phone not provided'} • {b.travelersCount} travelers • {b.status}
+                          </p>
                         </div>
 
                         <div className="md:text-right pt-3 md:pt-0 border-t md:border-t-0 border-stone-200">
@@ -888,8 +1160,36 @@ export const HotelPartnerDashboard: React.FC = () => {
             {/* TAB 7: REVENUE REPORTS */}
             {activeTab === 'guests' && (
               <div className="bg-white border border-stone-200 rounded-3xl p-6 md:p-8 space-y-5 shadow-xs animate-in fade-in">
-                <h3 className="font-serif-display text-3xl font-light italic text-stone-900">Guest Check-in &amp; Check-out</h3>
-                <p className="text-xs text-stone-500">Record arrival and departure times, room availability, and guest contact details.</p>
+                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                  <div>
+                    <h3 className="font-serif-display text-3xl font-light italic text-stone-900">Guest Check-in &amp; Check-out</h3>
+                    <p className="text-xs text-stone-500">Record arrival and departure times, room availability, and guest contact details.</p>
+                  </div>
+                  <div className="flex gap-3">
+                    <select
+                      value={selectedMonth}
+                      onChange={(e) => setSelectedMonth(Number(e.target.value))}
+                      className="px-3 py-2 rounded-lg border border-stone-300 text-xs font-semibold text-stone-700 bg-white"
+                    >
+                      {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => (
+                        <option key={m} value={m}>
+                          {new Date(2026, m - 1).toLocaleString('default', { month: 'long' })}
+                        </option>
+                      ))}
+                    </select>
+                    <select
+                      value={selectedYear}
+                      onChange={(e) => setSelectedYear(Number(e.target.value))}
+                      className="px-3 py-2 rounded-lg border border-stone-300 text-xs font-semibold text-stone-700 bg-white"
+                    >
+                      {[2024, 2025, 2026, 2027].map((y) => (
+                        <option key={y} value={y}>
+                          {y}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
                 <div className="space-y-3">
                   {hotelBookings.map((booking) => {
                     const stay = checkedIn[booking.id];
@@ -906,46 +1206,7 @@ export const HotelPartnerDashboard: React.FC = () => {
 
             {activeTab === 'revenue' && (
               <div className="space-y-6 animate-in fade-in">
-                <div className="bg-white border border-stone-200 rounded-3xl p-6 md:p-8 flex flex-col lg:flex-row lg:items-end justify-between gap-5 shadow-xs">
-                  <div>
-                  <h3 className="font-serif-display text-3xl font-light italic text-stone-900 mb-2">
-                    Revenue &amp; Settlement Reports
-                  </h3>
-                  <p className="text-xs text-stone-500 font-light">
-                    Professional settlement analytics, commission tracking, and profit performance
-                  </p>
-                  </div>
-                  <div className="flex items-center gap-1 p-1 bg-stone-100 rounded-xl">
-                    {(['current', 'last-month', 'last-year'] as RevenuePeriod[]).map((period) => (
-                      <button key={period} type="button" onClick={() => setRevenuePeriod(period)} className={`px-3 py-2 rounded-lg text-[10px] font-bold uppercase tracking-wide ${revenuePeriod === period ? 'bg-white text-[#9D3373] shadow-sm' : 'text-stone-500'}`}>
-                        {period === 'current' ? 'Current' : period === 'last-month' ? 'Last month' : 'Last year'}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                  {[
-                    ['Gross revenue', periodGross, 'text-[#9D3373]'],
-                    ['Voyago commission', periodVoyagoFee, 'text-rose-700'],
-                    ['Hotel profit', periodProfit, 'text-emerald-700'],
-                    ['Bookings', hotelBookings.length, 'text-stone-900'],
-                  ].map(([label, value, color]) => (
-                    <div key={String(label)} className="bg-white border border-stone-200 rounded-2xl p-5 shadow-xs">
-                      <span className="text-[10px] font-bold text-stone-500 uppercase tracking-widest block mb-2">{label}</span>
-                      <span className={`font-serif-display text-3xl font-light italic ${color}`}>{label === 'Bookings' ? value : `₹${Number(value).toLocaleString()}`}</span>
-                      <span className="text-[10px] text-stone-500 block mt-2">{selectedPeriod.label}</span>
-                    </div>
-                  ))}
-                </div>
-
-                <div className="bg-white border border-stone-200 rounded-3xl p-6 md:p-8 shadow-xs">
-                  <div className="flex items-center justify-between mb-5"><div><h4 className="font-semibold text-sm text-stone-900">Settlement performance</h4><p className="text-xs text-stone-500 mt-1">Gross revenue, Voyago fee, and net hotel profit by period</p></div><span className="text-[10px] font-bold uppercase text-emerald-700 bg-emerald-50 border border-emerald-200 px-3 py-1 rounded-full">15% commission</span></div>
-                  <div className="h-72 flex items-end gap-3 sm:gap-6 border-b border-stone-200 px-2">
-                    {revenuePoints.map((point) => <div key={point.label} className="flex-1 h-full flex flex-col items-center justify-end gap-1"><span className="text-[9px] text-stone-500">₹{point.gross.toLocaleString()}</span><div className="w-full max-w-16 flex items-end gap-1 h-[78%]"><div className="flex-1 bg-[#9D3373] rounded-t-md" style={{ height: `${Math.max(8, point.gross / maxChartValue * 100)}%` }} /><div className="flex-1 bg-rose-400 rounded-t-md" style={{ height: `${Math.max(6, point.gross * 0.15 / maxChartValue * 100)}%` }} /><div className="flex-1 bg-emerald-500 rounded-t-md" style={{ height: `${Math.max(8, point.gross * 0.85 / maxChartValue * 100)}%` }} /></div><span className="text-[10px] text-stone-500">{point.label}</span></div>)}
-                  </div>
-                  <div className="flex flex-wrap gap-4 mt-4 text-[10px] font-semibold"><span className="text-[#9D3373]">■ Gross revenue</span><span className="text-rose-700">■ Voyago fee</span><span className="text-emerald-700">■ Hotel profit</span></div>
-                </div>
+                <HotelPartnerAnalytics partnerId={currentUser.id} />
               </div>
             )}
 

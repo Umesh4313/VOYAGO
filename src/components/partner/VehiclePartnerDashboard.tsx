@@ -43,6 +43,7 @@ type RevenuePeriod = 'current' | 'last-month' | 'last-year';
 export const VehiclePartnerDashboard: React.FC = () => {
   const {
     currentUser,
+    destinations,
     vehicles,
     bookings,
     updateVehiclePriceAndStatus,
@@ -72,6 +73,7 @@ export const VehiclePartnerDashboard: React.FC = () => {
   const [imageUrl, setImageUrl] = useState(
     'https://images.unsplash.com/photo-1549399542-7e3f8b79c341?w=600&auto=format&fit=crop&q=80'
   );
+  const [vehicleDestinationId, setVehicleDestinationId] = useState('dest-goa');
 
   // Edit vehicle state
   const [editingVehicleId, setEditingVehicleId] = useState<string | null>(null);
@@ -124,7 +126,7 @@ export const VehiclePartnerDashboard: React.FC = () => {
   const handleCreateVehicle = (e: React.FormEvent) => {
     e.preventDefault();
     addVehicle({
-      destinationId: 'dest-goa',
+      destinationId: vehicleDestinationId,
       name,
       type,
       category,
@@ -564,6 +566,20 @@ export const VehiclePartnerDashboard: React.FC = () => {
                         className="w-full bg-white border border-stone-300 rounded-xl px-4 py-2.5 text-xs text-stone-900 focus:outline-none focus:border-[#9D3373]"
                       />
                     </div>
+                  </div>
+
+                  <div>
+                    <label className="text-[11px] font-bold uppercase tracking-wider text-stone-700 block mb-1.5">
+                      Destination
+                    </label>
+                    <select
+                      value={vehicleDestinationId}
+                      onChange={(e) => setVehicleDestinationId(e.target.value)}
+                      className="w-full bg-white border border-stone-300 rounded-xl px-4 py-2.5 text-xs text-stone-900 focus:outline-none focus:border-[#9D3373]"
+                      required
+                    >
+                      {destinations.map((destination) => <option key={destination.id} value={destination.id}>{destination.name}</option>)}
+                    </select>
                   </div>
 
                   <div className="grid grid-cols-3 gap-4">

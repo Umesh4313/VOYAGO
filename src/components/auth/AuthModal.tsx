@@ -22,6 +22,9 @@ export const AuthModal: React.FC = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
+  const [city, setCity] = useState('');
+  const [state, setState] = useState('');
+  const [phone, setPhone] = useState('');
   const [partnerBusinessName, setPartnerBusinessName] = useState('');
   const [rememberMe, setRememberMe] = useState(true);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
@@ -111,6 +114,9 @@ export const AuthModal: React.FC = () => {
             partnerBusinessName: activeTab === 'signup' && selectedRole !== 'CUSTOMER'
               ? partnerBusinessName.trim()
               : undefined,
+            city: city.trim(),
+            state: state.trim(),
+            phone: phone.trim(),
           });
       if (activeTab === 'login' && response.role !== selectedRole) {
         authService.logout();
@@ -122,11 +128,19 @@ export const AuthModal: React.FC = () => {
         name: response.name,
         email: response.email,
         role: response.role as UserRole,
+        partnerStatus: response.partnerStatus,
+        phone: response.phone,
+        city: response.city,
+        state: response.state,
       };
       beginUserSession(authenticatedUser, activeTab === 'signup');
       setCustomerActiveTab('dashboard');
+      const isPendingPartner = (response.role === 'HOTEL_PARTNER' || response.role === 'VEHICLE_PARTNER')
+        && response.partnerStatus !== 'APPROVED';
       setActiveView(
-        response.role === 'HOTEL_PARTNER'
+        isPendingPartner
+          ? 'home'
+          : response.role === 'HOTEL_PARTNER'
           ? 'hotel-partner'
           : response.role === 'VEHICLE_PARTNER'
             ? 'vehicle-partner'
@@ -135,7 +149,12 @@ export const AuthModal: React.FC = () => {
               : 'customer'
       );
       addAuditLog('USER_AUTHENTICATED', 'User', authenticatedUser.id, `User logged in with role ${authenticatedUser.role}`);
-      setMessage({ type: 'success', text: `Welcome back, ${response.name}!` });
+      setMessage({
+        type: isPendingPartner ? 'success' : 'success',
+        text: isPendingPartner
+          ? 'Your partner account is waiting for admin approval. The partner dashboard will unlock after approval.'
+          : `Welcome back, ${response.name}!`,
+      });
       setTimeout(() => {
         setIsAuthModalOpen(false);
         setMessage(null);
@@ -354,6 +373,18 @@ export const AuthModal: React.FC = () => {
                   />
                 </div>
               )}
+              {activeTab === 'signup' && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[11px] font-bold text-stone-700 uppercase tracking-wider mb-1">City</label>
+                    <input type="text" required value={city} onChange={(e) => setCity(e.target.value)} placeholder="Mumbai" className="w-full px-4 py-2.5 rounded-xl border border-stone-300 bg-white text-stone-900 text-sm focus:outline-none focus:border-[#9D3373]" />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-bold text-stone-700 uppercase tracking-wider mb-1">State</label>
+                    <input type="text" required value={state} onChange={(e) => setState(e.target.value)} placeholder="Maharashtra" className="w-full px-4 py-2.5 rounded-xl border border-stone-300 bg-white text-stone-900 text-sm focus:outline-none focus:border-[#9D3373]" />
+                  </div>
+                </div>
+              )}
               {activeTab === 'signup' && selectedRole !== 'CUSTOMER' && (
                 <div>
                   <label htmlFor="partner-business-name" className="block text-[11px] font-bold text-stone-700 uppercase tracking-wider mb-1">
@@ -401,6 +432,13 @@ export const AuthModal: React.FC = () => {
                   className="w-full px-4 py-2.5 rounded-xl border border-stone-300 bg-white text-stone-900 text-sm focus:outline-none focus:border-[#9D3373] focus:ring-1 focus:ring-[#9D3373]"
                 />
               </div>
+
+              {activeTab === 'signup' && (
+                <div>
+                  <label className="block text-[11px] font-bold text-stone-700 uppercase tracking-wider mb-1">Phone number</label>
+                  <input type="tel" required value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+91 98765 43210" className="w-full px-4 py-2.5 rounded-xl border border-stone-300 bg-white text-stone-900 text-sm focus:outline-none focus:border-[#9D3373]" />
+                </div>
+              )}
 
               <div>
                 <div className="flex items-center justify-between mb-1">

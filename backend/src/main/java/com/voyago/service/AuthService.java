@@ -45,6 +45,8 @@ public class AuthService {
                 .passwordHash(passwordEncoder.encode(request.getPassword()))
                 .role(requestedRole)
                 .phone(request.getPhone())
+                .city(request.getCity())
+                .state(request.getState())
                 .partnerBusinessName(request.getPartnerBusinessName())
                 .partnerStatus(requestedRole.endsWith("_PARTNER") ? "PENDING" : null)
                 .build();
@@ -59,6 +61,10 @@ public class AuthService {
                 .name(saved.getName())
                 .email(saved.getEmail())
                 .role(saved.getRole())
+                .partnerStatus(saved.getPartnerStatus())
+                .phone(saved.getPhone())
+                .city(saved.getCity())
+                .state(saved.getState())
                 .build();
     }
 
@@ -85,6 +91,10 @@ public class AuthService {
                 .name(user.getName())
                 .email(user.getEmail())
                 .role(user.getRole())
+                .partnerStatus(user.getPartnerStatus())
+                .phone(user.getPhone())
+                .city(user.getCity())
+                .state(user.getState())
                 .build();
     }
 

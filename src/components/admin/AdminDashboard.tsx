@@ -34,8 +34,9 @@ import {
   Image,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
-import { Hotel, TravelMode, Destination, TouristPlace, TravelOption } from '../../types';
+import { Hotel, TravelMode, Destination, TouristPlace, TravelOption, Booking } from '../../types';
 import { apiClient } from '../../services/api';
+import { AdvancedRevenueAnalytics } from './AdvancedRevenueAnalytics';
 
 type AdminTab =
   | 'dashboard'
@@ -225,12 +226,26 @@ export const AdminDashboard: React.FC = () => {
     addTransportOption,
     users,
     refreshUsers,
+    updatePartnerStatus,
+    updateBookingStatus,
     adminActiveTab,
     setAdminActiveTab,
   } = useApp();
 
   const activeTab = (adminActiveTab as AdminTab) || 'dashboard';
   const setActiveTab = (tab: AdminTab) => setAdminActiveTab(tab);
+
+  const handlePartnerStatus = async (partner: PartnerSummary, status: 'APPROVED' | 'REJECTED' | 'SUSPENDED') => {
+    try {
+      await updatePartnerStatus(partner.id, status);
+      setHotelPartners((prev) => prev.map((item) => item.id === partner.id ? { ...item, partnerStatus: status } : item));
+      setVehiclePartners((prev) => prev.map((item) => item.id === partner.id ? { ...item, partnerStatus: status } : item));
+      showToast(`${partner.name} is now ${status.toLowerCase()}.`);
+    } catch (error) {
+      console.error('Failed to update partner status:', error);
+      showToast('Unable to update partner approval status.');
+    }
+  };
 
   useEffect(() => {
     if (activeTab !== 'customers') return;
@@ -316,6 +331,9 @@ export const AdminDashboard: React.FC = () => {
     rating: '4.5',
   });
   const [toast, setToast] = useState<string | null>(null);
+  const [bookingFilter, setBookingFilter] = useState<'ALL' | Booking['status']>('ALL');
+  const [expandedBookingId, setExpandedBookingId] = useState<string | null>(null);
+  const [userRoleFilter, setUserRoleFilter] = useState<'ALL' | 'CUSTOMER' | 'HOTEL_PARTNER' | 'VEHICLE_PARTNER'>('ALL');
 
   // Hotel management
   const [selectedHotelForManage, setSelectedHotelForManage] = useState<Hotel | null>(null);
@@ -361,7 +379,8 @@ export const AdminDashboard: React.FC = () => {
   });
 
   // ── Analytics helpers ──────────────────────────────────────────────────────
-  const totalGMV = bookings.reduce((sum, b) => sum + b.totalCost, 0);
+  const activeBookings = bookings.filter((b) => b.status !== 'CANCELLED');
+  const totalGMV = activeBookings.reduce((sum, b) => sum + b.totalCost, 0);
   const confirmedBookingsCount = bookings.filter((b) => b.status === 'CONFIRMED').length;
   const cancelledCount = bookings.filter((b) => b.status === 'CANCELLED').length;
   const completedCount = bookings.filter((b) => b.status === 'COMPLETED').length;
@@ -370,14 +389,14 @@ export const AdminDashboard: React.FC = () => {
   const currentMonth = now.getMonth();
   const currentYear = now.getFullYear();
 
-  const monthlyIncome = bookings
+  const monthlyIncome = activeBookings
     .filter((b) => {
       const d = new Date(b.createdAt);
       return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
     })
     .reduce((sum, b) => sum + b.totalCost, 0);
 
-  const monthlyOrders = bookings.filter((b) => {
+  const monthlyOrders = activeBookings.filter((b) => {
     const d = new Date(b.createdAt);
     return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
   }).length;
@@ -391,7 +410,7 @@ export const AdminDashboard: React.FC = () => {
 
   const revenueChartData = last6Months.map(({ month, year, label }) => ({
     label,
-    value: bookings
+    value: activeBookings
       .filter((b) => {
         const d = new Date(b.createdAt);
         return d.getMonth() === month && d.getFullYear() === year;
@@ -401,7 +420,7 @@ export const AdminDashboard: React.FC = () => {
 
   const ordersChartData = last6Months.map(({ month, year, label }) => ({
     label,
-    value: bookings.filter((b) => {
+    value: activeBookings.filter((b) => {
       const d = new Date(b.createdAt);
       return d.getMonth() === month && d.getFullYear() === year;
     }).length,
@@ -415,6 +434,20 @@ export const AdminDashboard: React.FC = () => {
       log.action.toLowerCase().includes(logFilter.toLowerCase()) ||
       log.details.toLowerCase().includes(logFilter.toLowerCase())
   );
+
+  const filteredBookings = bookings.filter((booking) => (
+    bookingFilter === 'ALL' || booking.status === bookingFilter
+  ));
+
+  const handleBookingStatus = async (booking: Booking, status: Booking['status']) => {
+    try {
+      await updateBookingStatus(booking.id, status);
+      showToast(`${booking.id} marked ${status.toLowerCase()}.`);
+    } catch (error) {
+      console.error('Failed to update booking status:', error);
+      showToast('Unable to update this booking status.');
+    }
+  };
 
   const getTransportDestinationId = (item: TravelOption) => {
     if (item.destinationId) return item.destinationId;
@@ -1214,6 +1247,24 @@ export const AdminDashboard: React.FC = () => {
                             <Eye className="w-3.5 h-3.5" />
                             View Hotels
                           </button>
+                          {partner.partnerStatus === 'PENDING' && (
+                            <button
+                              type="button"
+                              onClick={() => handlePartnerStatus(partner, 'APPROVED')}
+                              className="px-3 py-2 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold flex items-center gap-1"
+                            >
+                              <Check className="w-3.5 h-3.5" /> Approve
+                            </button>
+                          )}
+                          {partner.partnerStatus === 'APPROVED' && (
+                            <button
+                              type="button"
+                              onClick={() => handlePartnerStatus(partner, 'SUSPENDED')}
+                              className="px-3 py-2 rounded-full bg-amber-100 hover:bg-amber-200 text-amber-800 text-xs font-bold"
+                            >
+                              Suspend
+                            </button>
+                          )}
                         </div>
                       </div>
                     ))}
@@ -1302,6 +1353,24 @@ export const AdminDashboard: React.FC = () => {
                             <Eye className="w-3.5 h-3.5" />
                             View Vehicles
                           </button>
+                          {partner.partnerStatus === 'PENDING' && (
+                            <button
+                              type="button"
+                              onClick={() => handlePartnerStatus(partner, 'APPROVED')}
+                              className="px-3 py-2 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold flex items-center gap-1"
+                            >
+                              <Check className="w-3.5 h-3.5" /> Approve
+                            </button>
+                          )}
+                          {partner.partnerStatus === 'APPROVED' && (
+                            <button
+                              type="button"
+                              onClick={() => handlePartnerStatus(partner, 'SUSPENDED')}
+                              className="px-3 py-2 rounded-full bg-amber-100 hover:bg-amber-200 text-amber-800 text-xs font-bold"
+                            >
+                              Suspend
+                            </button>
+                          )}
                         </div>
                       </div>
                     ))}
@@ -1315,17 +1384,27 @@ export const AdminDashboard: React.FC = () => {
             ══════════════════════════════════════════════════ */}
             {activeTab === 'customers' && (
               <div className="bg-white border border-stone-200 rounded-3xl p-6 md:p-8 space-y-6 shadow-xs animate-in fade-in">
-                <div>
+                <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
+                  <div>
                   <h3 className="font-serif-display text-3xl font-light italic text-stone-900">Registered Users</h3>
                   <p className="text-xs text-stone-500">Customers and partner accounts registered in MongoDB</p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {(['ALL', 'CUSTOMER', 'HOTEL_PARTNER', 'VEHICLE_PARTNER'] as const).map((role) => (
+                      <button key={role} type="button" onClick={() => setUserRoleFilter(role)} className={`px-3 py-2 rounded-full text-[10px] font-bold uppercase border ${userRoleFilter === role ? 'bg-[#9D3373] text-white border-[#9D3373]' : 'bg-white text-stone-600 border-stone-200'}`}>
+                        {role === 'ALL' ? 'All' : role.replace('_', ' ')}
+                      </button>
+                    ))}
+                  </div>
                 </div>
                 <div className="space-y-3">
-                  {users.map((cust) => (
+                  {users.filter((cust) => userRoleFilter === 'ALL' || cust.role === userRoleFilter).map((cust) => (
                     <div key={cust.id} className="bg-[#FAF8F5] border border-stone-200 rounded-xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
                       <div>
                         <h4 className="font-serif-display text-base font-light text-stone-900">{cust.name}</h4>
                         <p className="text-xs text-stone-500">{cust.email} • {cust.phone || 'Phone not provided'}</p>
-                        <p className="text-xs text-stone-500 mt-1"><MapPin className="inline w-3 h-3 mr-1" />{cust.address || cust.city || 'Location not provided'}</p>
+                        <p className="text-xs text-stone-500 mt-1"><MapPin className="inline w-3 h-3 mr-1" />{[cust.city, cust.state].filter(Boolean).join(', ') || cust.address || 'Location not provided'}</p>
+                        <p className="text-xs text-stone-500 mt-1">ID: {cust.id} • Registered: {cust.createdAt ? new Date(cust.createdAt).toLocaleDateString() : 'Unknown'}</p>
                       </div>
                       <div className="text-right">
                         <span className="text-[10px] font-bold uppercase tracking-wider text-[#9D3373] block">{cust.role.replace('_', ' ')}</span>
@@ -1348,17 +1427,39 @@ export const AdminDashboard: React.FC = () => {
             ══════════════════════════════════════════════════ */}
             {activeTab === 'bookings' && (
               <div className="space-y-6 animate-in fade-in">
-                <div>
-                  <h3 className="font-serif-display text-3xl font-light italic text-stone-900">Platform Master Bookings</h3>
-                  <p className="text-xs text-stone-500">All customer trips, payments, and instant settlement references</p>
+                <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
+                  <div>
+                    <h3 className="font-serif-display text-3xl font-light italic text-stone-900">Platform Master Bookings</h3>
+                    <p className="text-xs text-stone-500">Full customer itineraries, inventory selections, payment records, and booking status</p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {(['ALL', 'CONFIRMED', 'COMPLETED', 'CANCELLED'] as const).map((status) => (
+                      <button
+                        key={status}
+                        type="button"
+                        onClick={() => setBookingFilter(status)}
+                        className={`px-3 py-2 rounded-full text-[10px] font-bold uppercase tracking-wider border transition-colors ${
+                          bookingFilter === status
+                            ? 'bg-[#9D3373] border-[#9D3373] text-white'
+                            : 'bg-white border-stone-200 text-stone-600 hover:border-[#9D3373]'
+                        }`}
+                      >
+                        {status === 'ALL' ? `All (${bookings.length})` : `${status} (${bookings.filter((booking) => booking.status === status).length})`}
+                      </button>
+                    ))}
+                  </div>
                 </div>
                 <div className="space-y-4">
-                  {bookings.map((b) => (
-                    <div
-                      key={b.id}
-                      className="bg-white border border-stone-200 rounded-2xl p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-xs"
-                    >
-                      <div>
+                  {filteredBookings.map((b) => {
+                    const isExpanded = expandedBookingId === b.id;
+                    return (
+                    <div key={b.id} className="bg-white border border-stone-200 rounded-2xl shadow-xs overflow-hidden">
+                      <button
+                        type="button"
+                        onClick={() => setExpandedBookingId(isExpanded ? null : b.id)}
+                        className="w-full text-left p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 hover:bg-[#FAF8F5] transition-colors"
+                      >
+                      <div className="min-w-0">
                         <div className="flex items-center gap-2 mb-1">
                           <span className="text-xs font-mono font-bold text-[#9D3373]">{b.id}</span>
                           <span className="text-xs text-stone-400">•</span>
@@ -1368,6 +1469,8 @@ export const AdminDashboard: React.FC = () => {
                             className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full ${
                               b.status === 'CONFIRMED'
                                 ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                : b.status === 'COMPLETED'
+                                ? 'bg-sky-50 text-sky-700 border border-sky-200'
                                 : 'bg-rose-50 text-rose-700 border border-rose-200'
                             }`}
                           >
@@ -1378,7 +1481,7 @@ export const AdminDashboard: React.FC = () => {
                           {b.destination} Trip ({b.departureDate} &rarr; {b.returnDate})
                         </p>
                         <p className="text-xs text-stone-500 mt-0.5">
-                          Ref: {b.payment.transactionRef} • Method: {b.payment.method}
+                          {b.customerEmail} • {b.customerPhone || 'No phone'} • Ref: {b.payment.transactionRef}
                         </p>
                       </div>
                       <div className="md:text-right pt-3 md:pt-0 border-t md:border-t-0 border-stone-200">
@@ -1387,8 +1490,89 @@ export const AdminDashboard: React.FC = () => {
                           ₹{b.totalCost.toLocaleString()}
                         </span>
                       </div>
+                      </button>
+                      {isExpanded && (
+                        <div className="border-t border-stone-200 bg-[#FAF8F5] p-5 space-y-5">
+                          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3 text-xs">
+                            <div className="bg-white border border-stone-200 rounded-xl p-4">
+                              <p className="text-[10px] uppercase tracking-widest text-stone-500 font-bold mb-2">Customer</p>
+                              <p className="font-bold text-stone-900">{b.customerName}</p>
+                              <p className="text-stone-500">{b.customerEmail}</p>
+                              <p className="text-stone-500">{b.customerPhone || 'Phone not provided'}</p>
+                              <p className="text-stone-500">User ID: {b.userId}</p>
+                            </div>
+                            <div className="bg-white border border-stone-200 rounded-xl p-4">
+                              <p className="text-[10px] uppercase tracking-widest text-stone-500 font-bold mb-2">Journey</p>
+                              <p className="font-bold text-stone-900">{b.destination}</p>
+                              <p className="text-stone-500">{b.departureDate} to {b.returnDate}</p>
+                              <p className="text-stone-500">{b.durationDays} days • {b.travelersCount} travelers</p>
+                              <p className="text-stone-500">Created: {new Date(b.createdAt).toLocaleString()}</p>
+                            </div>
+                            <div className="bg-white border border-stone-200 rounded-xl p-4">
+                              <p className="text-[10px] uppercase tracking-widest text-stone-500 font-bold mb-2">Payment</p>
+                              <p className="font-bold text-stone-900">{b.payment.method} • {b.payment.status}</p>
+                              <p className="text-stone-500">Transaction: {b.payment.transactionRef}</p>
+                              <p className="text-stone-500">Paid: ₹{b.payment.amount.toLocaleString()}</p>
+                              <p className="text-stone-500">Payment time: {new Date(b.payment.timestamp).toLocaleString()}</p>
+                            </div>
+                          </div>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+                            <div className="bg-white border border-stone-200 rounded-xl p-4">
+                              <p className="text-[10px] uppercase tracking-widest text-stone-500 font-bold mb-2">Transport</p>
+                              {b.transport ? (
+                                <>
+                                  <p className="font-bold text-stone-900">{b.transport.mode}: {b.transport.operator} ({b.transport.code})</p>
+                                  <p className="text-stone-500">{b.transport.fromCity} to {b.transport.toCity}</p>
+                                  <p className="text-stone-500">{b.transport.departureTime} to {b.transport.arrivalTime} • {b.transport.duration} • {b.transport.stops}</p>
+                                  <p className="text-stone-500">Seats: {b.selectedSeats?.join(', ') || 'Not recorded'}</p>
+                                  <p className="font-bold text-[#9D3373]">₹{(b.transport.pricePerPerson * b.travelersCount).toLocaleString()} ({b.travelersCount} x ₹{b.transport.pricePerPerson.toLocaleString()})</p>
+                                </>
+                              ) : <p className="text-stone-500">No transport selected</p>}
+                            </div>
+                            <div className="bg-white border border-stone-200 rounded-xl p-4">
+                              <p className="text-[10px] uppercase tracking-widest text-stone-500 font-bold mb-2">Stay</p>
+                              {b.hotel ? (
+                                <>
+                                  <p className="font-bold text-stone-900">{b.hotel.name}</p>
+                                  <p className="text-stone-500">Room: {b.hotel.roomName} ({b.hotel.roomType})</p>
+                                  <p className="text-stone-500">Condition: {b.hotel.condition === 'NON_AC' ? 'Non-AC' : 'AC'} • {b.hotel.nights} nights</p>
+                                  <p className="text-stone-500">{b.hotel.address}</p>
+                                  <p className="font-bold text-[#9D3373]">₹{b.hotel.total.toLocaleString()} ({b.hotel.nights} x ₹{b.hotel.pricePerNight.toLocaleString()})</p>
+                                </>
+                              ) : <p className="text-stone-500">No hotel selected</p>}
+                            </div>
+                          </div>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+                            <div className="bg-white border border-stone-200 rounded-xl p-4">
+                              <p className="text-[10px] uppercase tracking-widest text-stone-500 font-bold mb-2">Vehicle</p>
+                              {b.vehicle ? (
+                                <>
+                                  <p className="font-bold text-stone-900">{b.vehicle.name} ({b.vehicle.type})</p>
+                                  <p className="text-stone-500">{b.vehicle.days} days • ₹{b.vehicle.dailyRate.toLocaleString()} per day</p>
+                                  <p className="font-bold text-[#9D3373]">₹{b.vehicle.total.toLocaleString()}</p>
+                                </>
+                              ) : <p className="text-stone-500">No vehicle selected</p>}
+                            </div>
+                            <div className="bg-white border border-stone-200 rounded-xl p-4">
+                              <p className="text-[10px] uppercase tracking-widest text-stone-500 font-bold mb-2">Places to Visit</p>
+                              {b.places?.length ? <div className="flex flex-wrap gap-1.5">{b.places.map((place) => <span key={place.id} className="px-2 py-1 rounded-md bg-stone-100 border border-stone-200 text-stone-700">{place.name}</span>)}</div> : <p className="text-stone-500">No attractions selected</p>}
+                            </div>
+                          </div>
+                          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-stone-200 pt-4">
+                            <div className="text-xs text-stone-600">Subtotal: ₹{(b.totalCost - b.taxesAndFees).toLocaleString()} • Taxes/fees: ₹{b.taxesAndFees.toLocaleString()} • <strong className="text-stone-900">Total: ₹{b.totalCost.toLocaleString()}</strong></div>
+                            <div className="flex gap-2">
+                              {b.status === 'CONFIRMED' && <>
+                                <button type="button" onClick={() => handleBookingStatus(b, 'COMPLETED')} className="px-3 py-2 rounded-full bg-emerald-600 text-white text-[10px] font-bold uppercase tracking-wider hover:bg-emerald-700">Mark Completed</button>
+                                <button type="button" onClick={() => handleBookingStatus(b, 'CANCELLED')} className="px-3 py-2 rounded-full bg-rose-600 text-white text-[10px] font-bold uppercase tracking-wider hover:bg-rose-700">Cancel Booking</button>
+                              </>}
+                            </div>
+                          </div>
+                        </div>
+                      )}
                     </div>
-                  ))}
+                    );
+                  })}
+                  {filteredBookings.length === 0 && <div className="bg-white border border-dashed border-stone-300 rounded-2xl p-10 text-center text-sm text-stone-500">No {bookingFilter === 'ALL' ? '' : bookingFilter.toLowerCase()} bookings found.</div>}
                 </div>
               </div>
             )}
@@ -1398,58 +1582,7 @@ export const AdminDashboard: React.FC = () => {
             ══════════════════════════════════════════════════ */}
             {activeTab === 'analytics' && (
               <div className="space-y-6 animate-in fade-in">
-                <div className="bg-white border border-stone-200 rounded-3xl p-6 md:p-8 space-y-6 shadow-xs">
-                  <div>
-                    <h3 className="font-serif-display text-3xl font-light italic text-stone-900 mb-2">
-                      Financial Analytics &amp; Flow
-                    </h3>
-                    <p className="text-xs text-stone-500 font-normal">
-                      Real-time transaction volume broken down by travel, hotel, and vehicle components
-                    </p>
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                    <div className="bg-[#FAF8F5] border border-stone-200 rounded-2xl p-5">
-                      <span className="text-[10px] font-bold text-stone-500 uppercase tracking-widest block mb-1">Platform GMV</span>
-                      <span className="font-serif-display text-3xl font-light italic text-[#9D3373]">₹{totalGMV.toLocaleString()}</span>
-                    </div>
-                    <div className="bg-[#FAF8F5] border border-stone-200 rounded-2xl p-5">
-                      <span className="text-[10px] font-bold text-stone-500 uppercase tracking-widest block mb-1">Avg Order Value (AOV)</span>
-                      <span className="font-serif-display text-3xl font-light italic text-stone-900">
-                        ₹{bookings.length > 0 ? Math.round(totalGMV / bookings.length).toLocaleString() : 0}
-                      </span>
-                    </div>
-                    <div className="bg-[#FAF8F5] border border-stone-200 rounded-2xl p-5">
-                      <span className="text-[10px] font-bold text-stone-500 uppercase tracking-widest block mb-1">Platform Take-Rate (5%)</span>
-                      <span className="font-serif-display text-3xl font-light italic text-emerald-700">
-                        ₹{Math.round(totalGMV * 0.05).toLocaleString()}
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Analytics Charts */}
-                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                    <div>
-                      <h4 className="text-xs font-bold text-stone-700 uppercase tracking-widest mb-3">6-Month Revenue (₹)</h4>
-                      <BarChart data={revenueChartData} color="#9D3373" />
-                    </div>
-                    <div>
-                      <h4 className="text-xs font-bold text-stone-700 uppercase tracking-widest mb-3">6-Month Order Count</h4>
-                      <BarChart data={ordersChartData} color="#10b981" />
-                    </div>
-                  </div>
-
-                  <div>
-                    <h4 className="text-xs font-bold text-stone-700 uppercase tracking-widest mb-3">Booking Status Breakdown</h4>
-                    <DonutChart
-                      segments={[
-                        { label: 'Confirmed', value: confirmedBookingsCount, color: '#9D3373' },
-                        { label: 'Completed', value: completedCount, color: '#10b981' },
-                        { label: 'Cancelled', value: cancelledCount, color: '#f43f5e' },
-                      ]}
-                    />
-                  </div>
-                </div>
+                <AdvancedRevenueAnalytics />
               </div>
             )}
 

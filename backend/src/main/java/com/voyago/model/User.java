@@ -35,6 +35,10 @@ public class User {
 
     private String phone;
 
+    private String city;
+
+    private String state;
+
     private String avatar;
 
     private String partnerBusinessName;

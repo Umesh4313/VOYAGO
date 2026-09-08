@@ -9,6 +9,10 @@ export interface AuthResponse {
   name: string;
   email: string;
   role: string;
+  partnerStatus?: User['partnerStatus'];
+  phone?: string;
+  city?: string;
+  state?: string;
 }
 
 export interface LoginPayload {
@@ -22,6 +26,8 @@ export interface RegisterPayload {
   password: string;
   role: string;
   phone?: string;
+  city: string;
+  state: string;
   partnerBusinessName?: string;
 }
 
@@ -42,6 +48,10 @@ export const authService = {
       name: data.name,
       email: data.email,
       role: data.role,
+      partnerStatus: data.partnerStatus,
+      phone: data.phone,
+      city: data.city,
+      state: data.state,
     }));
     return data;
   },
@@ -54,6 +64,10 @@ export const authService = {
       name: data.name,
       email: data.email,
       role: data.role,
+      partnerStatus: data.partnerStatus,
+      phone: data.phone,
+      city: data.city,
+      state: data.state,
     }));
     return data;
   },

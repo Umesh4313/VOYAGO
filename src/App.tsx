@@ -22,7 +22,7 @@ import { VehiclePartnerDashboard } from './components/partner/VehiclePartnerDash
 import { AdminDashboard } from './components/admin/AdminDashboard';
 
 const MainLayout: React.FC = () => {
-  const { activeView } = useApp();
+  const { activeView, currentUser } = useApp();
   const [scrollProgress, setScrollProgress] = React.useState(0);
 
   const prepareLetterReveal = (heading: HTMLElement) => {
@@ -183,13 +183,21 @@ const MainLayout: React.FC = () => {
           </div>
         )}
 
-        {activeView === 'hotel-partner' && (
+        {activeView === 'hotel-partner' && currentUser.partnerStatus !== 'APPROVED' && (
+          <PartnerApprovalNotice role="Hotel partner" />
+        )}
+
+        {activeView === 'hotel-partner' && currentUser.partnerStatus === 'APPROVED' && (
           <div className="bg-[#FAF8F5] min-h-screen">
             <HotelPartnerDashboard />
           </div>
         )}
 
-        {activeView === 'vehicle-partner' && (
+        {activeView === 'vehicle-partner' && currentUser.partnerStatus !== 'APPROVED' && (
+          <PartnerApprovalNotice role="Vehicle partner" />
+        )}
+
+        {activeView === 'vehicle-partner' && currentUser.partnerStatus === 'APPROVED' && (
           <div className="bg-[#FAF8F5] min-h-screen">
             <VehiclePartnerDashboard />
           </div>
@@ -220,6 +228,16 @@ const MainLayout: React.FC = () => {
     </div>
   );
 };
+
+const PartnerApprovalNotice: React.FC<{ role: string }> = ({ role }) => (
+  <div className="min-h-screen bg-[#FAF8F5] px-6 py-20 flex items-center justify-center">
+    <div className="max-w-xl bg-white border border-stone-200 rounded-3xl p-8 text-center shadow-xs">
+      <p className="text-[10px] uppercase tracking-widest font-bold text-[#9D3373]">Account review</p>
+      <h1 className="mt-2 text-3xl font-serif-display text-stone-900">Approval required</h1>
+      <p className="mt-3 text-sm text-stone-500">Your {role} account is waiting for admin approval. Your dashboard and inventory tools will appear here after approval.</p>
+    </div>
+  </div>
+);
 
 export default function App() {
   return (

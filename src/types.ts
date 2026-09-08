@@ -8,8 +8,9 @@ export interface User {
   email: string;
   role: UserRole;
   phone?: string;
-  address?: string;
   city?: string;
+  state?: string;
+  address?: string;
   avatar?: string;
   partnerBusinessName?: string;
   partnerStatus?: PartnerStatus;
@@ -43,6 +44,7 @@ export interface HotelRoom {
   name: string;
   type: string;
   pricePerNight: number;
+  nonAcPricePerNight?: number;
   maxGuests: number;
   capacity?: number;
   bedType: string;
@@ -51,7 +53,11 @@ export interface HotelRoom {
   bookedUnits?: number;
   availableCount: number;
   imageUrl: string;
+  gallery?: string[];
+  bathroomImageUrl?: string;
+  viewImageUrl?: string;
   description?: string;
+  isAC?: boolean;
   isActive?: boolean;
 }
 
@@ -72,6 +78,8 @@ export interface Hotel {
   priceStartsFrom: number;
   rooms: HotelRoom[];
   status?: 'ACTIVE' | 'INACTIVE';
+  approvalStatus?: 'PENDING' | 'APPROVED' | 'REJECTED' | 'SUSPENDED';
+  rejectionReason?: string;
 }
 
 export type VehicleType = 'CAR' | 'BIKE' | 'SCOOTER';

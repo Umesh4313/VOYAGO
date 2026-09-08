@@ -21,6 +21,8 @@ public class HotelRoom {
 
     private double pricePerNight;
 
+    private Double nonAcPricePerNight;
+
     private int maxGuests;
 
     private int capacity;
@@ -37,7 +39,15 @@ public class HotelRoom {
 
     private String imageUrl;
 
+    private List<String> gallery;
+
+    private String bathroomImageUrl;
+
+    private String viewImageUrl;
+
     private String description;
+
+    private boolean isAC = true; // AC or Non-AC room
 
     @Builder.Default
     private boolean isActive = true;

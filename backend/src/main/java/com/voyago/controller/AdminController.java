@@ -1,6 +1,7 @@
 package com.voyago.controller;
 
 import com.voyago.dto.AnalyticsSummaryResponse;
+import com.voyago.dto.RevenueAnalyticsResponse;
 import com.voyago.model.AuditLog;
 import com.voyago.model.PlatformSettings;
 import com.voyago.model.User;
@@ -26,6 +27,28 @@ public class AdminController {
     @GetMapping("/analytics")
     public ResponseEntity<AnalyticsSummaryResponse> getAnalytics() {
         return ResponseEntity.ok(adminService.getAnalytics());
+    }
+
+    /**
+     * Get advanced revenue analytics with time range
+     * @param range Time range in months: 1, 2, 6, 12, 60 (default: 6)
+     */
+    @GetMapping("/revenue-analytics")
+    public ResponseEntity<RevenueAnalyticsResponse> getRevenueAnalytics(
+            @RequestParam(defaultValue = "6") int range) {
+        return ResponseEntity.ok(adminService.getRevenueAnalytics(range));
+    }
+
+    /**
+     * Get hotel partner-specific revenue analytics
+     * @param partnerId Partner ID
+     * @param range Time range in months
+     */
+    @GetMapping("/hotel-partners/{partnerId}/analytics")
+    public ResponseEntity<RevenueAnalyticsResponse> getHotelPartnerAnalytics(
+            @PathVariable String partnerId,
+            @RequestParam(defaultValue = "6") int range) {
+        return ResponseEntity.ok(adminService.getHotelPartnerAnalytics(partnerId, range));
     }
 
     @GetMapping("/users")
@@ -90,6 +113,8 @@ public class AdminController {
         result.put("email", user.getEmail());
         result.put("role", user.getRole());
         result.put("phone", user.getPhone());
+        result.put("city", user.getCity());
+        result.put("state", user.getState());
         result.put("partnerBusinessName", user.getPartnerBusinessName());
         result.put("partnerStatus", user.getPartnerStatus());
         result.put("createdAt", user.getCreatedAt());

@@ -2,7 +2,7 @@ import React from 'react';
 import { useApp } from '../context/AppContext';
 
 export const PopularDestinations: React.FC = () => {
-  const { startNewTrip, setPlannerStep, openPlanningLogin } = useApp();
+  const { destinations, startNewTrip, setPlannerStep, openPlanningLogin } = useApp();
 
   const destinationsList = [
     {
@@ -42,6 +42,7 @@ export const PopularDestinations: React.FC = () => {
       alt: 'Himachal Pradesh snow mountain peaks',
     },
   ];
+  const destinationImages = new Map(destinations.map((destination) => [destination.id, destination.imageUrl]));
 
   const handleSelectDestination = (destId: string) => {
     startNewTrip(destId, '2026-10-15', '2026-10-19', 2, 'Moderate', 'CAR', false);
@@ -85,7 +86,7 @@ export const PopularDestinations: React.FC = () => {
             >
               {/* Background Photo */}
               <img
-                src={dest.image}
+                src={destinationImages.get(dest.id) || dest.image}
                 alt={dest.alt}
                 referrerPolicy="no-referrer"
                 className="home-image-motion w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"

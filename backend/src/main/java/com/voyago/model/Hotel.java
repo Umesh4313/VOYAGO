@@ -49,4 +49,9 @@ public class Hotel {
 
     @Builder.Default
     private String status = "ACTIVE"; // ACTIVE | INACTIVE
+
+    @Builder.Default
+    private String approvalStatus = "PENDING"; // PENDING | APPROVED | REJECTED | SUSPENDED
+
+    private String rejectionReason;
 }

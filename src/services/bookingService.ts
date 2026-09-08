@@ -14,7 +14,10 @@ export interface BookingRequest {
   transportId?: string;
   selectedSeats?: string[];
   hotelId?: string;
+  hotelName?: string;
   roomId?: string;
+  roomName?: string;
+  roomCondition?: 'AC' | 'NON_AC';
   vehicleId?: string;
   placeIds?: string[];
   paymentMethod: PaymentMethod;
@@ -41,8 +44,23 @@ export const bookingService = {
     return data;
   },
 
+  async updateStatus(id: string, status: Booking['status']): Promise<Booking> {
+    const { data } = await apiClient.patch<Booking>(`/bookings/${id}/status`, { status });
+    return data;
+  },
+
   async getAllBookings(): Promise<Booking[]> {
     const { data } = await apiClient.get<Booking[]>('/bookings');
+    return data;
+  },
+
+  async getHotelPartnerBookings(): Promise<Booking[]> {
+    const { data } = await apiClient.get<Booking[]>('/bookings/partner/hotels');
+    return data;
+  },
+
+  async getVehiclePartnerBookings(): Promise<Booking[]> {
+    const { data } = await apiClient.get<Booking[]>('/bookings/partner/vehicles');
     return data;
   },
 
@@ -63,7 +81,10 @@ export const bookingService = {
       transportId: draft.selectedTransport?.id,
       selectedSeats: draft.selectedSeats,
       hotelId: draft.selectedHotel?.id,
+      hotelName: draft.selectedHotel?.name,
       roomId: draft.selectedRoom?.id,
+      roomName: draft.selectedRoom?.name,
+      roomCondition: draft.roomCondition,
       vehicleId: !draft.skipVehicle ? draft.selectedVehicle?.id : undefined,
       placeIds: draft.selectedPlaces.map(p => p.id),
       paymentMethod,

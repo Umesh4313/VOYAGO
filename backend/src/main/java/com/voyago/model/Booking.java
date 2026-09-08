@@ -76,6 +76,7 @@ public class Booking {
         private String roomType;
         private String roomName;
         private double pricePerNight;
+        private String condition;
         private int nights;
         private double total;
         private String address;

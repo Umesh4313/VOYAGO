@@ -22,4 +22,12 @@ public class AuthResponse {
     private String email;
 
     private String role;
+
+    private String partnerStatus;
+
+    private String phone;
+
+    private String city;
+
+    private String state;
 }

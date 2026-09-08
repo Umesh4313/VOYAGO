@@ -21,10 +21,11 @@ import {
   Printer,
   Compass,
   ArrowRight,
+  Image as ImageIcon,
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { useApp } from '../../context/AppContext';
-import { TravelMode, PaymentMethod, Booking } from '../../types';
+import { TravelMode, PaymentMethod, Booking, HotelRoom } from '../../types';
 import { VisualSeatPicker } from './VisualSeatPicker';
 import {
   scoreTravelOptions,
@@ -61,6 +62,7 @@ export const TripPlannerModal: React.FC = () => {
   const [confirmedBooking, setConfirmedBooking] = useState<Booking | null>(null);
   const [transportClass, setTransportClass] = useState<'AC' | 'NON_AC'>('AC');
   const [roomCondition, setRoomCondition] = useState<'AC' | 'NON_AC'>('AC');
+  const [roomGallery, setRoomGallery] = useState<{ room: HotelRoom; hotelName: string; photos: Array<{ url: string; label: string }> } | null>(null);
 
   // Available options for current destination
   const destTravelOptions = useMemo(() => {
@@ -72,7 +74,7 @@ export const TripPlannerModal: React.FC = () => {
       if (currentDraft.destinationName.toLowerCase() === 'udaipur') return t.id.includes('udaipur');
       if (currentDraft.destinationName.toLowerCase() === 'kerala') return t.id.includes('kerala');
       if (currentDraft.destinationName.toLowerCase() === 'varanasi') return t.id.includes('varanasi');
-      return true;
+      return false;
     });
   }, [travelOptions, currentDraft.destinationId, currentDraft.destinationName]);
 
@@ -108,8 +110,28 @@ export const TripPlannerModal: React.FC = () => {
   if (!isPlannerOpen) return null;
 
   // Price calculations
+  const getRoomPrice = (room: HotelRoom) =>
+    roomCondition === 'NON_AC' ? (room.nonAcPricePerNight ?? room.pricePerNight * 0.8) : room.pricePerNight;
+  const getRoomPhotos = (room: HotelRoom, hotelImage: string) => {
+    const defaultRoom = 'https://images.unsplash.com/photo-1618773928121-c32242e63f39?w=1000&auto=format&fit=crop&q=85';
+    const defaultBathroom = 'https://images.unsplash.com/photo-1584622650111-993a426fbf0a?w=1000&auto=format&fit=crop&q=85';
+    const defaultView = 'https://images.unsplash.com/photo-1626621341517-bbf3d9990a23?w=1000&auto=format&fit=crop&q=85';
+    const defaultHotel = 'https://images.unsplash.com/photo-1566073771259-6a8506099945?w=1000&auto=format&fit=crop&q=85';
+    const imageKey = (value: string) => {
+      try { return new URL(value).pathname; } catch { return value.split('?')[0]; }
+    };
+    const sameAsHotel = imageKey(room.imageUrl || '') === imageKey(hotelImage || '');
+    const roomImage = sameAsHotel ? defaultRoom : room.imageUrl;
+    const candidates = [
+      { url: roomImage || defaultRoom, label: 'Room' },
+      { url: room.bathroomImageUrl || defaultBathroom, label: 'Bathroom' },
+      { url: room.viewImageUrl || defaultView, label: 'View' },
+      { url: room.gallery?.[0] || (sameAsHotel ? defaultHotel : hotelImage), label: 'Hotel' },
+    ];
+    return candidates.filter((photo, index) => photo.url && candidates.findIndex((item) => item.url === photo.url) === index);
+  };
   const transportCost = (currentDraft.selectedTransport?.pricePerPerson || 0) * currentDraft.travelersCount;
-  const hotelCost = (currentDraft.selectedRoom?.pricePerNight || 0) * currentDraft.durationDays;
+  const hotelCost = (currentDraft.selectedRoom ? getRoomPrice(currentDraft.selectedRoom) : 0) * currentDraft.durationDays;
   const vehicleCost = !currentDraft.skipVehicle && currentDraft.selectedVehicle
     ? currentDraft.selectedVehicle.dailyRate * currentDraft.durationDays
     : 0;
@@ -771,10 +793,20 @@ export const TripPlannerModal: React.FC = () => {
                               ))}
                             </div>
                           </div>
-                          {hotel.rooms.map((room) => {
+                          {hotel.rooms
+                            .filter((room) => {
+                              // Filter rooms based on AC/Non-AC selection
+                              if (roomCondition === 'AC') {
+                                return room.isAC !== false; // Show AC rooms (default) and rooms without isAC specified
+                              } else {
+                                return room.isAC === false; // Show only Non-AC rooms
+                              }
+                            })
+                            .map((room) => {
                             const isRoomSelected =
                               isHotelSelected && currentDraft.selectedRoom?.id === room.id;
-                            const roomTotal = room.pricePerNight * currentDraft.durationDays;
+                            const roomPrice = getRoomPrice(room);
+                            const roomTotal = roomPrice * currentDraft.durationDays;
                             const isAvailable = room.availableCount > 0;
 
                             return (
@@ -786,7 +818,19 @@ export const TripPlannerModal: React.FC = () => {
                                     : 'border-stone-200'
                                 }`}
                               >
-                                <div>
+                                <div className="flex items-start gap-3 min-w-0">
+                                  <img
+                                    src={room.imageUrl || hotel.heroImage}
+                                    alt={`${room.name} room`}
+                                    referrerPolicy="no-referrer"
+                                    className="w-20 h-16 rounded-lg object-cover border border-stone-200 shrink-0"
+                                    onClick={() => setRoomGallery({
+                                      room,
+                                      hotelName: hotel.name,
+                                      photos: getRoomPhotos(room, hotel.heroImage),
+                                    })}
+                                  />
+                                  <div>
                                   <div className="flex items-center gap-2">
                                     <h4 className="font-serif-display text-base font-light text-stone-900">
                                       {room.name}
@@ -795,7 +839,7 @@ export const TripPlannerModal: React.FC = () => {
                                       {room.type} • {roomCondition === 'AC' ? 'AC' : 'Non-AC'}
                                     </span>
                                   </div>
-                                  <p className="text-xs text-stone-500 mt-0.5">
+                                    <p className="text-xs text-stone-500 mt-0.5">
                                     {room.bedType} • Max {room.maxGuests} Guests •{' '}
                                     <span
                                       className={
@@ -804,7 +848,8 @@ export const TripPlannerModal: React.FC = () => {
                                     >
                                       {isAvailable ? `${room.availableCount} available` : 'Sold out'}
                                     </span>
-                                  </p>
+                                    </p>
+                                  </div>
                                 </div>
 
                                 <div className="flex items-center justify-between sm:justify-end w-full sm:w-auto gap-4">
@@ -813,7 +858,7 @@ export const TripPlannerModal: React.FC = () => {
                                       ₹{roomTotal.toLocaleString()}
                                     </p>
                                     <p className="text-[10px] text-stone-500">
-                                      ₹{room.pricePerNight.toLocaleString()} / night
+                                      ₹{roomPrice.toLocaleString()} / night
                                     </p>
                                   </div>
 
@@ -824,6 +869,11 @@ export const TripPlannerModal: React.FC = () => {
                                       updateDraft({
                                         selectedHotel: hotel,
                                         selectedRoom: room,
+                                      });
+                                      setRoomGallery({
+                                        room,
+                                        hotelName: hotel.name,
+                                        photos: getRoomPhotos(room, hotel.heroImage),
                                       });
                                     }}
                                     className={`px-4 py-2 rounded-full text-xs font-bold uppercase tracking-wider transition-all ${
@@ -840,10 +890,39 @@ export const TripPlannerModal: React.FC = () => {
                                       ? '✓ Selected'
                                       : 'Select Room'}
                                   </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setRoomGallery({
+                                      room,
+                                      hotelName: hotel.name,
+                                      photos: getRoomPhotos(room, hotel.heroImage),
+                                    })}
+                                    className="px-3 py-2 rounded-full text-xs font-bold border border-stone-300 text-stone-700 hover:border-[#9D3373] hover:text-[#9D3373] flex items-center gap-1.5"
+                                  >
+                                    <ImageIcon className="w-3.5 h-3.5" /> Photos
+                                  </button>
                                 </div>
                               </div>
                             );
                           })}
+                          {hotel.rooms.filter((room) => {
+                            if (roomCondition === 'AC') {
+                              return room.isAC !== false;
+                            } else {
+                              return room.isAC === false;
+                            }
+                          }).length === 0 && (
+                            <div className="p-4 rounded-xl bg-amber-50 border border-amber-200 text-center">
+                              <p className="text-sm text-amber-900 font-semibold">
+                                No {roomCondition === 'AC' ? 'AC' : 'Non-AC'} rooms available
+                              </p>
+                              <p className="text-xs text-amber-800 mt-1">
+                                {roomCondition === 'AC' 
+                                  ? 'This property does not have AC rooms. Try selecting Non-AC rooms.'
+                                  : 'This property does not have Non-AC rooms. Try selecting AC rooms.'}
+                              </p>
+                            </div>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -1524,6 +1603,34 @@ export const TripPlannerModal: React.FC = () => {
           )}
 
         </div>
+
+        {roomGallery && (
+          <div className="absolute inset-0 z-20 bg-stone-950/80 p-4 sm:p-8 flex items-center justify-center">
+            <div className="w-full max-w-4xl max-h-full overflow-y-auto rounded-3xl bg-[#FAF8F5] border border-stone-200 shadow-2xl p-5 sm:p-7">
+              <div className="flex items-start justify-between gap-4 mb-5">
+                <div>
+                  <p className="text-[10px] uppercase tracking-widest font-bold text-[#9D3373]">Room preview</p>
+                  <h3 className="font-serif-display text-2xl sm:text-3xl text-stone-900">{roomGallery.room.name}</h3>
+                  <p className="text-xs text-stone-500 mt-1">{roomGallery.hotelName} · See the room, bathroom, and surrounding view</p>
+                </div>
+                <button type="button" onClick={() => setRoomGallery(null)} className="w-9 h-9 rounded-full border border-stone-200 bg-white flex items-center justify-center text-stone-700 hover:text-[#9D3373]" aria-label="Close room photos">
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {roomGallery.photos.map((photo) => (
+                  <figure key={`${photo.url}-${photo.label}`} className="relative overflow-hidden rounded-2xl bg-stone-200 aspect-[4/3]">
+                    <img src={photo.url} alt={`${roomGallery.room.name} ${photo.label.toLowerCase()}`} referrerPolicy="no-referrer" className="w-full h-full object-cover" />
+                    <figcaption className="absolute bottom-0 inset-x-0 px-3 py-2 text-[10px] uppercase tracking-widest font-bold text-white bg-gradient-to-t from-black/70 to-transparent">
+                      {photo.label}
+                    </figcaption>
+                  </figure>
+                ))}
+              </div>
+              <button type="button" onClick={() => setRoomGallery(null)} className="mt-5 w-full rounded-full bg-[#9D3373] hover:bg-[#862960] text-white py-3 text-xs font-bold uppercase tracking-widest">Choose this room</button>
+            </div>
+          </div>
+        )}
 
         {/* Modal Bottom Action Footer (For navigation between steps 1-6) */}
         {plannerStep < 7 && (

@@ -42,7 +42,13 @@ public class BookingRequest {
 
     private String hotelId;
 
+    private String hotelName;
+
     private String roomId;
+
+    private String roomName;
+
+    private String roomCondition;
 
     private String vehicleId;
 

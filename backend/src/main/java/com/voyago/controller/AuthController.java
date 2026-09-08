@@ -53,16 +53,18 @@ public class AuthController {
         User user = userRepository.findByEmail(userDetails.getUsername())
                 .orElseThrow(() -> new RuntimeException("User not found"));
         // Don't expose passwordHash
-        return ResponseEntity.ok(Map.of(
-                "id", user.getId(),
-                "name", user.getName(),
-                "email", user.getEmail(),
-                "role", user.getRole(),
-                "phone", user.getPhone() != null ? user.getPhone() : "",
-                "partnerBusinessName", user.getPartnerBusinessName() != null ? user.getPartnerBusinessName() : "",
-                "partnerStatus", user.getPartnerStatus() != null ? user.getPartnerStatus() : "",
-                "isActive", user.isActive(),
-                "createdAt", user.getCreatedAt() != null ? user.getCreatedAt().toString() : ""
+        return ResponseEntity.ok(Map.ofEntries(
+            Map.entry("id", user.getId()),
+            Map.entry("name", user.getName()),
+            Map.entry("email", user.getEmail()),
+            Map.entry("role", user.getRole()),
+            Map.entry("phone", user.getPhone() != null ? user.getPhone() : ""),
+            Map.entry("city", user.getCity() != null ? user.getCity() : ""),
+            Map.entry("state", user.getState() != null ? user.getState() : ""),
+            Map.entry("partnerBusinessName", user.getPartnerBusinessName() != null ? user.getPartnerBusinessName() : ""),
+            Map.entry("partnerStatus", user.getPartnerStatus() != null ? user.getPartnerStatus() : ""),
+            Map.entry("isActive", user.isActive()),
+            Map.entry("createdAt", user.getCreatedAt() != null ? user.getCreatedAt().toString() : "")
         ));
     }
 }

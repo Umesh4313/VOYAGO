@@ -26,5 +26,11 @@ public class RegisterRequest {
 
     private String phone;
 
+    @jakarta.validation.constraints.NotBlank(message = "City is required")
+    private String city;
+
+    @jakarta.validation.constraints.NotBlank(message = "State is required")
+    private String state;
+
     private String partnerBusinessName;
 }

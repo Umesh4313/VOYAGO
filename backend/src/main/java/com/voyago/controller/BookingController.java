@@ -63,6 +63,18 @@ public class BookingController {
         return ResponseEntity.ok(bookingService.getByUserId(userId));
     }
 
+    @GetMapping("/partner/hotels")
+    @PreAuthorize("hasRole('HOTEL_PARTNER')")
+    public ResponseEntity<List<Booking>> getHotelPartnerBookings(@AuthenticationPrincipal UserDetails userDetails) {
+        return ResponseEntity.ok(bookingService.getByHotelPartner(findCurrentUser(userDetails).getId()));
+    }
+
+    @GetMapping("/partner/vehicles")
+    @PreAuthorize("hasRole('VEHICLE_PARTNER')")
+    public ResponseEntity<List<Booking>> getVehiclePartnerBookings(@AuthenticationPrincipal UserDetails userDetails) {
+        return ResponseEntity.ok(bookingService.getByVehiclePartner(findCurrentUser(userDetails).getId()));
+    }
+
     // Get single booking by ID
     @GetMapping("/{id}")
     public ResponseEntity<Booking> getById(@PathVariable String id,
@@ -106,6 +118,12 @@ public class BookingController {
             return ResponseEntity.status(403).build();
         }
         return ResponseEntity.ok(bookingService.cancelBooking(id));
+    }
+
+    @PatchMapping("/{id}/status")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<Booking> updateStatus(@PathVariable String id, @RequestBody Map<String, String> body) {
+        return ResponseEntity.ok(bookingService.updateStatus(id, body.get("status")));
     }
 
     private User findCurrentUser(UserDetails userDetails) {

@@ -37,25 +37,25 @@ public class VehicleController {
     }
 
     @PostMapping
-    @PreAuthorize("hasAnyRole('VEHICLE_PARTNER', 'ADMIN')")
+    @PreAuthorize("hasAnyRole('VEHICLE_PARTNER', 'ADMIN') and @partnerApproval.isApproved(authentication)")
     public ResponseEntity<Vehicle> create(@RequestBody Vehicle vehicle) {
         return ResponseEntity.ok(vehicleService.create(vehicle));
     }
 
     @PutMapping("/{id}")
-    @PreAuthorize("hasAnyRole('VEHICLE_PARTNER', 'ADMIN')")
+    @PreAuthorize("hasAnyRole('VEHICLE_PARTNER', 'ADMIN') and @partnerApproval.isApproved(authentication)")
     public ResponseEntity<Vehicle> update(@PathVariable String id, @RequestBody Vehicle vehicle) {
         return ResponseEntity.ok(vehicleService.update(id, vehicle));
     }
 
     @PatchMapping("/{id}/toggle")
-    @PreAuthorize("hasAnyRole('VEHICLE_PARTNER', 'ADMIN')")
+    @PreAuthorize("hasAnyRole('VEHICLE_PARTNER', 'ADMIN') and @partnerApproval.isApproved(authentication)")
     public ResponseEntity<Vehicle> toggleAvailability(@PathVariable String id) {
         return ResponseEntity.ok(vehicleService.toggleAvailability(id));
     }
 
     @PatchMapping("/{id}/status")
-    @PreAuthorize("hasAnyRole('VEHICLE_PARTNER', 'ADMIN')")
+    @PreAuthorize("hasAnyRole('VEHICLE_PARTNER', 'ADMIN') and @partnerApproval.isApproved(authentication)")
     public ResponseEntity<Vehicle> updateStatus(@PathVariable String id, @RequestBody java.util.Map<String, String> body) {
         String status = body.get("rentalStatus");
         Vehicle vehicle = vehicleService.getById(id);

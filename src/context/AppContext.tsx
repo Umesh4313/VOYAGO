@@ -24,13 +24,16 @@ import {
   TRAVEL_OPTIONS,
   HOTELS,
   VEHICLES,
-  INITIAL_BOOKINGS,
   TOURIST_PLACES,
   INITIAL_AUDIT_LOGS,
 } from '../data/mockData';
 import authService from '../services/authService';
 import bookingService from '../services/bookingService';
 import adminService from '../services/adminService';
+import hotelService from '../services/hotelService';
+import vehicleService from '../services/vehicleService';
+import transportService from '../services/transportService';
+import apiClient from '../services/api';
 
 export type AppViewType = 'home' | 'customer' | 'my-trips' | 'hotel-partner' | 'vehicle-partner' | 'admin';
 
@@ -42,7 +45,8 @@ interface AppContextType {
   users: User[];
   refreshUsers: () => Promise<void>;
   toggleUserStatus: (userId: string) => void;
-  updatePartnerStatus: (userId: string, status: PartnerStatus) => void;
+  updatePartnerStatus: (userId: string, status: PartnerStatus) => Promise<void>;
+  updateProfile: (updates: Partial<User>) => Promise<User>;
 
   isAuthModalOpen: boolean;
   setIsAuthModalOpen: (open: boolean) => void;
@@ -89,18 +93,19 @@ interface AppContextType {
     method: PaymentMethod,
     simulateFailure?: boolean
   ) => Promise<{ success: boolean; booking?: Booking; error?: string }>;
-  cancelBooking: (bookingId: string) => void;
+  cancelBooking: (bookingId: string) => Promise<void>;
+  updateBookingStatus: (bookingId: string, status: Booking['status']) => Promise<Booking>;
 
   // Partner & Admin mutation functions
   updateHotelRoomPrice: (hotelId: string, roomId: string, newPrice: number) => void;
   updateHotelRoomDetails: (hotelId: string, roomId: string, newPrice: number, newTotalUnits: number, details?: Partial<Pick<HotelRoom, 'name' | 'bedType' | 'maxGuests'>>) => void;
-  addHotelRoomType: (hotelId: string, room: Omit<HotelRoom, 'id' | 'availableCount'>) => void;
-  addHotel: (hotel: Omit<Hotel, 'id'>) => void;
+  addHotelRoomType: (hotelId: string, room: Omit<HotelRoom, 'id' | 'availableCount'>) => Promise<Hotel>;
+  addHotel: (hotel: Omit<Hotel, 'id'>) => Promise<Hotel>;
   toggleHotelRoomAvailability: (hotelId: string, roomId: string) => void;
 
   updateVehiclePriceAndStatus: (vehicleId: string, newDailyRate: number, isAvailable: boolean) => void;
   setVehicleRentalStatus: (vehicleId: string, status: VehicleRentalStatus) => void;
-  addVehicle: (vehicle: Omit<Vehicle, 'id'>) => void;
+  addVehicle: (vehicle: Omit<Vehicle, 'id'>) => Promise<Vehicle>;
   addMaintenanceRecord: (record: Omit<MaintenanceRecord, 'id'>) => void;
 
   // Transportation Management (Admin)
@@ -318,6 +323,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setUsers(remoteUsers);
   }, []);
 
+  const updateProfile = async (updates: Partial<User>) => {
+    const { data } = await apiClient.put<User>('/users/me', updates);
+    const updatedUser = { ...currentUser, ...data, ...updates };
+    setCurrentUser(updatedUser);
+    setUsers((previousUsers) => previousUsers.map((user) => user.id === updatedUser.id ? { ...user, ...updatedUser } : user));
+    localStorage.setItem('voyago_user', JSON.stringify(updatedUser));
+    return updatedUser;
+  };
+
   // 3. Current Trip Draft
   const [isPlannerOpen, setIsPlannerOpen] = useState(false);
   const [plannerStep, setPlannerStep] = useState(1);
@@ -374,27 +388,27 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
     let isCurrentUser = true;
     setBookings([]);
-    bookingService.getMyBookings(currentUser.id)
+    const loadBookings = () => currentUser.role === 'ADMIN'
+      ? bookingService.getAllBookings()
+      : currentUser.role === 'HOTEL_PARTNER'
+      ? bookingService.getHotelPartnerBookings()
+      : currentUser.role === 'VEHICLE_PARTNER'
+      ? bookingService.getVehiclePartnerBookings()
+      : bookingService.getMyBookings(currentUser.id);
+    const refreshBookings = () => loadBookings()
       .then((userBookings) => {
         if (isCurrentUser) {
-          const demoBookings = currentUser.email === 'customer@gmail.com'
-            ? INITIAL_BOOKINGS.map((booking) => ({
-                ...booking,
-                id: `DEMO-${booking.id}`,
-                userId: currentUser.id,
-                customerName: currentUser.name,
-                customerEmail: currentUser.email,
-                customerPhone: currentUser.phone || booking.customerPhone,
-              }))
-            : [];
-          setBookings(userBookings.length > 0 ? userBookings : demoBookings);
+          setBookings(userBookings);
         }
       })
       .catch((error) => console.error('Failed to load bookings from the database.', error));
+    refreshBookings();
+    const refreshTimer = window.setInterval(refreshBookings, 10000);
     return () => {
       isCurrentUser = false;
+      window.clearInterval(refreshTimer);
     };
-  }, [currentUser.id]);
+  }, [currentUser.id, currentUser.role, activeView]);
 
   useEffect(() => {
     localStorage.setItem(`${LOCAL_STORAGE_PREFIX}logs`, JSON.stringify(auditLogs));
@@ -427,6 +441,49 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   useEffect(() => {
     localStorage.setItem(`${LOCAL_STORAGE_PREFIX}maintenance`, JSON.stringify(maintenanceRecords));
   }, [maintenanceRecords]);
+
+  useEffect(() => {
+    if (!authService.isAuthenticated() || !currentUser.role.endsWith('_PARTNER')) return;
+    let isCurrent = true;
+    const refreshPartnerApproval = () => authService.getMe()
+      .then((remoteUser) => {
+        if (!isCurrent) return;
+        setCurrentUser(remoteUser);
+        if (remoteUser.partnerStatus === 'APPROVED') {
+          setActiveView(remoteUser.role === 'HOTEL_PARTNER' ? 'hotel-partner' : 'vehicle-partner');
+        }
+      })
+      .catch((error) => console.error('Failed to refresh partner approval status.', error));
+    refreshPartnerApproval();
+    const approvalTimer = window.setInterval(refreshPartnerApproval, 10000);
+    return () => {
+      isCurrent = false;
+      window.clearInterval(approvalTimer);
+    };
+  }, [currentUser.id, currentUser.role]);
+
+  useEffect(() => {
+    let isCurrent = true;
+    Promise.all([hotelService.getAll(), vehicleService.getAll(), transportService.getAll()])
+      .then(([remoteHotels, remoteVehicles, remoteTransport]) => {
+        if (!isCurrent) return;
+        setHotels(remoteHotels.map((hotel) => ({
+          ...hotel,
+          rooms: (hotel.rooms || []).map((room) => ({
+            ...room,
+            totalUnits: room.totalUnits || 0,
+            bookedUnits: room.bookedUnits || 0,
+            availableCount: room.availableCount ?? 0,
+          })),
+        })));
+        setVehicles(remoteVehicles);
+        setTravelOptions(remoteTransport);
+      })
+      .catch((error) => console.error('Failed to load live catalog inventory.', error));
+    return () => {
+      isCurrent = false;
+    };
+  }, []);
 
   const addAuditLog = (action: string, entity: string, entityId: string, details: string) => {
     const newLog: AuditLog = {
@@ -495,10 +552,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     addAuditLog('USER_STATUS_TOGGLE', 'User', userId, 'Toggled user active/suspended state');
   };
 
-  const updatePartnerStatus = (userId: string, status: PartnerStatus) => {
-    setUsers((prev) =>
-      prev.map((u) => (u.id === userId ? { ...u, partnerStatus: status } : u))
-    );
+  const updatePartnerStatus = async (userId: string, status: PartnerStatus) => {
+    const updatedUser = await adminService.updatePartnerStatus(userId, status);
+    setUsers((prev) => prev.map((u) => (u.id === userId ? { ...u, ...updatedUser } : u)));
+    if (currentUser.id === userId) setCurrentUser((prev) => ({ ...prev, ...updatedUser }));
     addAuditLog('PARTNER_STATUS_UPDATE', 'User', userId, `Updated partner status to ${status}`);
     addNotification({
       title: 'Partner Account Updated',
@@ -646,6 +703,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         )
       );
       setBookings((prev) => [booking, ...prev.filter((item) => item.id !== booking.id)]);
+      
+      // Refresh hotels to update room availability
+      const updatedHotels = await hotelService.getAll();
+      setHotels(updatedHotels);
+      
       addAuditLog(
         'BOOKING_CONFIRMED',
         'Booking',
@@ -659,7 +721,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       });
       return { success: true, booking };
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Booking could not be saved. Please try again.';
+      const axiosMessage = (error as { response?: { data?: { message?: string; error?: string } } })?.response?.data;
+      const message = axiosMessage?.message || axiosMessage?.error || (error instanceof Error ? error.message : 'Booking could not be saved. Please try again.');
       return { success: false, error: message };
     }
 
@@ -817,12 +880,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return { success: true, booking: newBooking };
   };
 
-  const cancelBooking = (bookingId: string) => {
+  const updateBookingStatus = async (bookingId: string, status: Booking['status']) => {
+    const updatedBooking = await bookingService.updateStatus(bookingId, status);
+    setBookings((previousBookings) => previousBookings.map((booking) => (
+      booking.id === bookingId ? updatedBooking : booking
+    )));
+    return updatedBooking;
+  };
+
+  const cancelBooking = async (bookingId: string) => {
     const booking = bookings.find((b) => b.id === bookingId);
     if (!booking) return;
 
+    const cancelledBooking = await bookingService.cancelBooking(bookingId);
+
     setBookings((prev) =>
-      prev.map((b) => (b.id === bookingId ? { ...b, status: 'CANCELLED' } : b))
+      prev.map((b) => (b.id === bookingId ? cancelledBooking : b))
     );
 
     // Restore hotel room availableCount
@@ -922,29 +995,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     );
   };
 
-  const addHotelRoomType = (hotelId: string, roomData: Omit<HotelRoom, 'id' | 'availableCount'>) => {
-    const newRoom: HotelRoom = {
-      ...roomData,
-      id: `rm-${Date.now()}`,
-      totalUnits: roomData.totalUnits ?? 6,
-      bookedUnits: 0,
-      availableCount: roomData.totalUnits ?? 6,
-      isActive: true,
-    };
-
-    setHotels((prev) =>
-      prev.map((h) => (h.id === hotelId ? { ...h, rooms: [...h.rooms, newRoom] } : h))
-    );
-    addAuditLog('ROOM_ADDED', 'HotelRoom', newRoom.id, `Added room type ${newRoom.name}`);
+  const addHotelRoomType = async (hotelId: string, roomData: Omit<HotelRoom, 'id' | 'availableCount'>) => {
+    const updatedHotel = await hotelService.addRoom(hotelId, roomData);
+    setHotels((prev) => prev.map((hotel) => hotel.id === hotelId ? updatedHotel : hotel));
+    addAuditLog('ROOM_ADDED', 'HotelRoom', updatedHotel.rooms[updatedHotel.rooms.length - 1]?.id || hotelId, `Added room type ${roomData.name}`);
+    return updatedHotel;
   };
 
-  const addHotel = (hotelData: Omit<Hotel, 'id'>) => {
-    const hotel: Hotel = {
-      ...hotelData,
-      id: `hotel-${Date.now()}`,
-    };
-    setHotels((prev) => [...prev, hotel]);
+  const addHotel = async (hotelData: Omit<Hotel, 'id'>) => {
+    const hotel = await hotelService.create(hotelData);
+    setHotels((prev) => [hotel, ...prev]);
     addAuditLog('HOTEL_ADDED', 'Hotel', hotel.id, `Added hotel ${hotel.name}`);
+    return hotel;
   };
 
   const toggleHotelRoomAvailability = (hotelId: string, roomId: string) => {
@@ -1001,18 +1063,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     addAuditLog('VEHICLE_STATUS_CHANGE', 'Vehicle', vehicleId, `Rental status changed to ${status}`);
   };
 
-  const addVehicle = (vehicleData: Omit<Vehicle, 'id'>) => {
-    const newVehicle: Vehicle = {
+  const addVehicle = async (vehicleData: Omit<Vehicle, 'id'>) => {
+    const newVehicle: Omit<Vehicle, 'id'> = {
       ...vehicleData,
       partnerId: currentUser.id,
-      id: `veh-${Date.now()}`,
       rentalStatus: 'AVAILABLE',
       isAvailable: true,
       registrationNumber: vehicleData.registrationNumber || `GA-01-V-${Math.floor(1000 + Math.random() * 9000)}`,
       modelYear: vehicleData.modelYear || 2024,
     };
-    setVehicles((prev) => [newVehicle, ...prev]);
-    addAuditLog('VEHICLE_ADDED', 'Vehicle', newVehicle.id, `Added vehicle ${newVehicle.name}`);
+    const savedVehicle = await vehicleService.create(newVehicle);
+    setVehicles((prev) => [savedVehicle, ...prev]);
+    addAuditLog('VEHICLE_ADDED', 'Vehicle', savedVehicle.id, `Added vehicle ${savedVehicle.name}`);
+    return savedVehicle;
   };
 
   const addMaintenanceRecord = (record: Omit<MaintenanceRecord, 'id'>) => {
@@ -1103,6 +1166,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         refreshUsers,
         toggleUserStatus,
         updatePartnerStatus,
+        updateProfile,
         isAuthModalOpen,
         setIsAuthModalOpen,
         authModalInitialTab,
@@ -1128,6 +1192,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setPlannerStep,
         checkAvailability,
         processPaymentAndConfirm,
+        updateBookingStatus,
         cancelBooking,
         updateHotelRoomPrice,
         updateHotelRoomDetails,
