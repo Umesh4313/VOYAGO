@@ -26,6 +26,7 @@ import {
 import { useApp } from '../../context/AppContext';
 import { HotelRoom } from '../../types';
 import { HotelPartnerAnalytics } from './HotelPartnerAnalytics';
+import hotelService from '../../services/hotelService';
 
 type HotelTab =
   | 'dashboard'
@@ -56,6 +57,7 @@ export const HotelPartnerDashboard: React.FC = () => {
     notifications,
     addNotification,
     addHotel,
+    updateProfile,
   } = useApp();
 
   // Find partner's hotel
@@ -68,6 +70,8 @@ export const HotelPartnerDashboard: React.FC = () => {
   const [selectedMonth, setSelectedMonth] = useState<number>(new Date().getMonth() + 1);
   const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
   const [photoUploadMode, setPhotoUploadMode] = useState<'url' | 'device'>('url');
+  const [bookingAlertsEnabled, setBookingAlertsEnabled] = useState(myHotel?.bookingAlertsEnabled ?? true);
+  const [autoCheckInEnabled, setAutoCheckInEnabled] = useState(myHotel?.autoCheckInEnabled ?? false);
 
   // Room pricing state
   const [editingRoomId, setEditingRoomId] = useState<string | null>(null);
@@ -78,6 +82,7 @@ export const HotelPartnerDashboard: React.FC = () => {
   const [roomGuests, setRoomGuests] = useState(2);
   const [checkedIn, setCheckedIn] = useState<Record<string, { checkIn: string; checkOut?: string; aadhar: string; phone: string; address: string }>>({});
   const [toast, setToast] = useState<string | null>(null);
+  const [profileEditing, setProfileEditing] = useState(false);
 
   // Add Room form state
   const [newRoomName, setNewRoomName] = useState('');
@@ -274,17 +279,38 @@ export const HotelPartnerDashboard: React.FC = () => {
   }
 
   const hotelBookings = bookings.filter((b) => b.hotel?.id === myHotel.id);
+  const filteredHotelBookings = hotelBookings.filter((booking) => {
+    const date = new Date(booking.createdAt);
+    return date.getMonth() + 1 === selectedMonth && date.getFullYear() === selectedYear;
+  });
   const totalRevenue = hotelBookings.reduce((sum, b) => sum + (b.hotel?.total || 0), 0);
-  const periodConfig: Record<RevenuePeriod, { label: string; factor: number; points: string[] }> = {
-    current: { label: 'Current period', factor: 1, points: ['W1', 'W2', 'W3', 'W4'] },
-    'last-month': { label: 'Last month', factor: 0.88, points: ['W1', 'W2', 'W3', 'W4'] },
-    'last-year': { label: 'Last year', factor: 1.35, points: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'] },
+  const periodStart = revenuePeriod === 'last-year'
+    ? new Date(new Date().getFullYear() - 1, 0, 1)
+    : revenuePeriod === 'last-month'
+      ? new Date(new Date().getFullYear(), new Date().getMonth() - 1, 1)
+      : new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+  const periodEnd = revenuePeriod === 'last-year'
+    ? new Date(new Date().getFullYear() - 1, 11, 31, 23, 59, 59)
+    : revenuePeriod === 'last-month'
+      ? new Date(new Date().getFullYear(), new Date().getMonth(), 0, 23, 59, 59)
+      : new Date();
+  const periodBookings = hotelBookings.filter((booking) => {
+    const createdAt = new Date(booking.createdAt);
+    return createdAt >= periodStart && createdAt <= periodEnd && booking.status !== 'CANCELLED';
+  });
+  const selectedPeriod = {
+    label: revenuePeriod === 'last-year' ? 'Last year' : revenuePeriod === 'last-month' ? 'Last month' : 'Current period',
+    points: revenuePeriod === 'last-year' ? Array.from({ length: 12 }, (_, index) => new Date(periodStart.getFullYear(), index, 1)) : Array.from({ length: 4 }, (_, index) => index),
   };
-  const selectedPeriod = periodConfig[revenuePeriod];
-  const revenuePoints = selectedPeriod.points.map((label, index) => ({
-    label,
-    gross: Math.round((totalRevenue * selectedPeriod.factor * (0.72 + index * 0.08)) / selectedPeriod.points.length),
-  }));
+  const revenuePoints = selectedPeriod.points.map((point, index) => {
+    const pointBookings = revenuePeriod === 'last-year'
+      ? periodBookings.filter((booking) => new Date(booking.createdAt).getMonth() === (point as Date).getMonth())
+      : periodBookings.filter((booking) => Math.floor((new Date(booking.createdAt).getDate() - 1) / 7) === index);
+    return {
+      label: revenuePeriod === 'last-year' ? (point as Date).toLocaleString('en-US', { month: 'short' }) : `W${index + 1}`,
+      gross: pointBookings.reduce((sum, booking) => sum + (booking.hotel?.total || 0), 0),
+    };
+  });
   const periodGross = revenuePoints.reduce((sum, point) => sum + point.gross, 0);
   const periodVoyagoFee = Math.round(periodGross * 0.15);
   const periodProfit = periodGross - periodVoyagoFee;
@@ -292,7 +318,6 @@ export const HotelPartnerDashboard: React.FC = () => {
 
   const handleSavePrice = (roomId: string) => {
     if (newPrice > 0) {
-      updateHotelRoomPrice(myHotel.id, roomId, newPrice);
       updateHotelRoomDetails(myHotel.id, roomId, newPrice, roomUnits, { name: roomName, bedType: roomBed, maxGuests: roomGuests });
       setEditingRoomId(null);
       setToast('Room rate updated and synchronized in real time!');
@@ -349,6 +374,14 @@ export const HotelPartnerDashboard: React.FC = () => {
     myHotel.description = propDesc;
     setToast('Hotel details saved and updated across Voyago.');
     setTimeout(() => setToast(null), 3000);
+  };
+
+  const updateHotelSetting = async (setting: 'bookingAlertsEnabled' | 'autoCheckInEnabled', value: boolean) => {
+    const updatedHotel = await hotelService.update(myHotel.id, { ...myHotel, [setting]: value });
+    setBookingAlertsEnabled(updatedHotel.bookingAlertsEnabled ?? true);
+    setAutoCheckInEnabled(updatedHotel.autoCheckInEnabled ?? false);
+    setToast('Hotel settings synchronized with MongoDB.');
+    setTimeout(() => setToast(null), 2500);
   };
 
   // 14-day calendar simulation
@@ -1067,7 +1100,7 @@ export const HotelPartnerDashboard: React.FC = () => {
                         const dateKey = date.toISOString().slice(0, 10);
                         const bookingsForDate = hotelBookings.filter((booking) => dateKey >= booking.departureDate && dateKey < booking.returnDate);
                         const totalRooms = myHotel.rooms.reduce((sum, room) => sum + (room.totalUnits || 0), 0);
-                        const occupiedRooms = bookingsForDate.length;
+                        const occupiedRooms = bookingsForDate.reduce((sum, booking) => sum + (booking.hotel?.roomUnits || 1), 0);
                         const isFull = totalRooms > 0 && occupiedRooms >= totalRooms;
                         return <><span className={`text-[10px] px-2 py-0.5 rounded-full ${isFull ? 'bg-rose-50 text-rose-700 border-rose-200' : 'bg-emerald-50 text-emerald-700 border-emerald-200'} font-bold block`}>{isFull ? 'No rooms available' : `${Math.max(0, totalRooms - occupiedRooms)} rooms free`}</span>{bookingsForDate.map((booking) => <span key={booking.id} className="text-[9px] text-stone-600 block mt-1">{booking.customerName} • {booking.hotel?.roomName}</span>)}</>;
                       })()}
@@ -1106,7 +1139,7 @@ export const HotelPartnerDashboard: React.FC = () => {
                       onChange={(e) => setSelectedYear(Number(e.target.value))}
                       className="px-3 py-2 rounded-lg border border-stone-300 text-xs font-semibold text-stone-700 bg-white"
                     >
-                      {[2024, 2025, 2026, 2027].map((y) => (
+                      {Array.from({ length: 21 }, (_, index) => new Date().getFullYear() - 10 + index).map((y) => (
                         <option key={y} value={y}>
                           {y}
                         </option>
@@ -1121,7 +1154,7 @@ export const HotelPartnerDashboard: React.FC = () => {
                   </div>
                 ) : (
                   <div className="space-y-4">
-                    {hotelBookings.map((b) => (
+                    {filteredHotelBookings.map((b) => (
                       <div
                         key={b.id}
                         className="bg-white border border-stone-200 rounded-2xl p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-xs"
@@ -1191,7 +1224,7 @@ export const HotelPartnerDashboard: React.FC = () => {
                   </div>
                 </div>
                 <div className="space-y-3">
-                  {hotelBookings.map((booking) => {
+                  {filteredHotelBookings.map((booking) => {
                     const stay = checkedIn[booking.id];
                     return <div key={booking.id} className="border border-stone-200 rounded-2xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
                       <div className="flex-1"><p className="font-semibold text-sm">{booking.customerName} <span className="text-xs text-stone-400">• {booking.customerPhone}</span></p><p className="text-xs text-stone-500">{booking.customerEmail} • {booking.hotel?.roomName}</p><p className="text-xs text-stone-500 mt-1">{booking.departureDate} → {booking.returnDate} • Room status: {stay && !stay.checkOut ? 'Occupied' : stay?.checkOut ? 'Vacant' : 'Awaiting check-in'}</p>{!stay && <div className="grid sm:grid-cols-3 gap-2 mt-3"><input className="border rounded-lg px-2 py-1 text-xs" placeholder="Aadhaar number" id={`aadhar-${booking.id}`} /><input className="border rounded-lg px-2 py-1 text-xs" placeholder="Arrival phone" id={`phone-${booking.id}`} /><input className="border rounded-lg px-2 py-1 text-xs" placeholder="Home address" id={`address-${booking.id}`} /></div>}</div>
@@ -1233,6 +1266,8 @@ export const HotelPartnerDashboard: React.FC = () => {
                 <h3 className="font-serif-display text-3xl font-light italic text-stone-900">
                   Hotel Partner Profile
                 </h3>
+                <div className="flex gap-2"><button type="button" onClick={() => setProfileEditing((value) => !value)} className="px-4 py-2 rounded-full bg-[#9D3373] text-white text-xs font-bold">{profileEditing ? 'Close Edit' : 'Edit Profile'}</button><button type="button" onClick={async () => { await hotelService.delete(myHotel.id); logout(); }} className="px-4 py-2 rounded-full bg-rose-600 text-white text-xs font-bold">Delete Hotel</button></div>
+                {profileEditing && <div className="grid sm:grid-cols-2 gap-3 max-w-lg"><input className="border rounded-lg px-3 py-2 text-sm" defaultValue={currentUser.name} placeholder="Representative name" onBlur={(event) => updateProfile({ name: event.currentTarget.value })} /><input className="border rounded-lg px-3 py-2 text-sm" defaultValue={currentUser.phone || ''} placeholder="Phone" onBlur={(event) => updateProfile({ phone: event.currentTarget.value })} /></div>}
                 <div className="space-y-3 text-xs text-stone-700 max-w-md">
                   <div className="flex justify-between py-2 border-b border-stone-200">
                     <span className="text-stone-500">Representative</span>
@@ -1256,9 +1291,17 @@ export const HotelPartnerDashboard: React.FC = () => {
                 <h3 className="font-serif-display text-3xl font-light italic text-stone-900">
                   Console Settings
                 </h3>
-                <p className="text-xs text-stone-500">
-                  Configure real-time booking push alerts, currency formatting, and automated check-in SMS.
-                </p>
+                <p className="text-xs text-stone-500">Configure the live controls used by this partner console.</p>
+                <div className="max-w-2xl divide-y divide-stone-200 border border-stone-200 rounded-2xl">
+                  <label className="flex items-center justify-between gap-4 p-4 cursor-pointer">
+                    <span><span className="block text-sm font-semibold text-stone-800">Booking alerts</span><span className="block text-xs text-stone-500 mt-1">Show new reservation alerts in this dashboard.</span></span>
+                    <input type="checkbox" className="h-5 w-5 accent-[#9D3373]" checked={bookingAlertsEnabled} onChange={(event) => updateHotelSetting('bookingAlertsEnabled', event.target.checked)} />
+                  </label>
+                  <label className="flex items-center justify-between gap-4 p-4 cursor-pointer">
+                    <span><span className="block text-sm font-semibold text-stone-800">Automatic check-in reminders</span><span className="block text-xs text-stone-500 mt-1">Enable reminders for upcoming guest arrivals.</span></span>
+                    <input type="checkbox" className="h-5 w-5 accent-[#9D3373]" checked={autoCheckInEnabled} onChange={(event) => updateHotelSetting('autoCheckInEnabled', event.target.checked)} />
+                  </label>
+                </div>
               </div>
             )}
 

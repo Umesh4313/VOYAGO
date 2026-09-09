@@ -50,7 +50,11 @@ public class BookingRequest {
 
     private String roomCondition;
 
+    private int roomUnits = 1;
+
     private String vehicleId;
+
+    private int vehicleUnits = 1;
 
     private List<String> placeIds;
 

@@ -3,6 +3,7 @@ package com.voyago.service;
 import com.voyago.model.Hotel;
 import com.voyago.model.HotelRoom;
 import com.voyago.repository.HotelRepository;
+import com.voyago.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -13,13 +14,14 @@ import java.util.List;
 public class HotelService {
 
     private final HotelRepository hotelRepository;
+    private final UserRepository userRepository;
 
     public List<Hotel> getAll() {
-        return hotelRepository.findAll();
+        return hotelRepository.findAll().stream().map(this::syncApprovedPartner).toList();
     }
 
     public Hotel getById(String id) {
-        return hotelRepository.findById(id)
+        return hotelRepository.findById(id).map(this::syncApprovedPartner)
                 .orElseThrow(() -> new RuntimeException("Hotel not found: " + id));
     }
 
@@ -28,7 +30,20 @@ public class HotelService {
     }
 
     public List<Hotel> getByPartner(String partnerId) {
-        return hotelRepository.findByPartnerId(partnerId);
+        return hotelRepository.findByPartnerId(partnerId).stream().map(this::syncApprovedPartner).toList();
+    }
+
+    private Hotel syncApprovedPartner(Hotel hotel) {
+        if (!"PENDING".equals(hotel.getApprovalStatus()) || hotel.getPartnerId() == null)
+            return hotel;
+        userRepository.findById(hotel.getPartnerId()).ifPresent(user -> {
+            if ("APPROVED".equals(user.getPartnerStatus())) {
+                hotel.setApprovalStatus("APPROVED");
+                hotel.setStatus("ACTIVE");
+                hotelRepository.save(hotel);
+            }
+        });
+        return hotel;
     }
 
     public Hotel create(Hotel hotel) {

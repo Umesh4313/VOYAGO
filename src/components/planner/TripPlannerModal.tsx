@@ -1010,6 +1010,7 @@ export const TripPlannerModal: React.FC = () => {
                               alt={veh.name}
                               referrerPolicy="no-referrer"
                               className="w-full h-full object-cover"
+                              onError={(event) => { event.currentTarget.src = 'https://images.unsplash.com/photo-1558981806-ec527fa84c39?w=600&auto=format&fit=crop&q=80'; }}
                             />
                             <div className="absolute top-3 right-3 bg-white/90 backdrop-blur-xs text-stone-900 text-xs font-semibold px-2.5 py-1 rounded-full border border-stone-200 shadow-xs">
                               ★ {veh.rating}

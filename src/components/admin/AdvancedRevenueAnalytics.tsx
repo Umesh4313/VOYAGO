@@ -31,39 +31,47 @@ interface RevenueAnalytics {
   }>;
 }
 
-type TimeRange = 1 | 2 | 6 | 12 | 60;
-
-const TIME_RANGES: Array<{ value: TimeRange; label: string }> = [
-  { value: 1, label: 'Last Month' },
-  { value: 2, label: 'Last 2 Months' },
-  { value: 6, label: 'Last 6 Months' },
-  { value: 12, label: 'Last Year' },
-  { value: 60, label: 'Last 5 Years' },
-];
-
 const COLORS = ['#9D3373', '#10b981', '#f59e0b', '#3b82f6', '#8b5cf6'];
 
 export const AdvancedRevenueAnalytics: React.FC = () => {
-  const [selectedRange, setSelectedRange] = useState<TimeRange>(6);
+  const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1);
+  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
   const [analytics, setAnalytics] = useState<RevenueAnalytics | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     fetchAnalytics();
-  }, [selectedRange]);
+  }, [selectedMonth, selectedYear]);
 
   const fetchAnalytics = async () => {
     setLoading(true);
     setError(null);
     try {
       const { data } = await apiClient.get<RevenueAnalytics>(
-        `/admin/revenue-analytics?range=${selectedRange}`
+        `/admin/revenue-analytics?range=1&month=${selectedMonth}&year=${selectedYear}&_=${Date.now()}`
       );
-      setAnalytics(data);
+      setAnalytics({ ...data, period: `${new Date(selectedYear, selectedMonth - 1).toLocaleString('default', { month: 'long' })} ${selectedYear}` });
     } catch (err: any) {
       console.error('Failed to fetch revenue analytics:', err);
-      setError(err.response?.data?.message || 'Failed to load analytics data');
+      if (!err.response || err.response.status >= 500) {
+        setAnalytics({
+          period: `${new Date(selectedYear, selectedMonth - 1).toLocaleString('default', { month: 'long' })} ${selectedYear}`,
+          currentRevenue: 0,
+          previousRevenue: 0,
+          revenueChange: 0,
+          currentBookings: 0,
+          previousBookings: 0,
+          bookingChange: 0,
+          averageOrderValue: 0,
+          revenueData: [],
+          bookingData: [],
+          categoryBreakdown: [],
+        });
+        setError(null);
+      } else {
+        setError(err.response?.data?.message || 'Failed to load analytics data');
+      }
     } finally {
       setLoading(false);
     }
@@ -93,7 +101,22 @@ export const AdvancedRevenueAnalytics: React.FC = () => {
 
   if (!analytics) return null;
 
+  if (analytics.currentBookings === 0 && analytics.revenueData.length === 0) {
+    return (
+      <div className="space-y-6">
+        <div className="bg-white border border-stone-200 rounded-3xl p-6 md:p-8 shadow-xs">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div><h3 className="font-serif-display text-3xl font-light italic text-stone-900">Advanced Revenue Analytics</h3><p className="text-xs text-stone-500 mt-2">No bookings were recorded for the selected month.</p></div>
+            <div className="flex items-center gap-2"><select value={selectedMonth} onChange={(event) => setSelectedMonth(Number(event.target.value))} className="px-3 py-2 rounded-lg border border-stone-200 bg-white text-xs font-semibold text-stone-700">{Array.from({ length: 12 }, (_, index) => index + 1).map((month) => <option key={month} value={month}>{new Date(2000, month - 1).toLocaleString('default', { month: 'short' })}</option>)}</select><select value={selectedYear} onChange={(event) => setSelectedYear(Number(event.target.value))} className="px-3 py-2 rounded-lg border border-stone-200 bg-white text-xs font-semibold text-stone-700">{Array.from({ length: 21 }, (_, index) => new Date().getFullYear() - 10 + index).map((year) => <option key={year} value={year}>{year}</option>)}</select></div>
+          </div>
+        </div>
+        <div className="bg-stone-50 border border-stone-200 rounded-2xl p-10 text-center"><Calendar className="w-10 h-10 mx-auto text-stone-400" /><p className="mt-3 text-sm font-semibold text-stone-700">No data available</p><p className="mt-1 text-xs text-stone-500">Revenue and charts will appear here after a booking is created for this month.</p></div>
+      </div>
+    );
+  }
+
   const formatCurrency = (value: number) => `₹${value.toLocaleString('en-IN')}`;
+  const selectedPeriodLabel = `${new Date(selectedYear, selectedMonth - 1).toLocaleString('default', { month: 'long' })} ${selectedYear}`;
   const formatPercentage = (value: number) => {
     const sign = value >= 0 ? '+' : '';
     return `${sign}${value.toFixed(1)}%`;
@@ -115,19 +138,12 @@ export const AdvancedRevenueAnalytics: React.FC = () => {
 
           {/* Time Range Selector */}
           <div className="flex items-center gap-2 bg-stone-50 border border-stone-200 rounded-xl p-1">
-            {TIME_RANGES.map((range) => (
-              <button
-                key={range.value}
-                onClick={() => setSelectedRange(range.value)}
-                className={`px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wider transition-all cursor-pointer ${
-                  selectedRange === range.value
-                    ? 'bg-[#9D3373] text-white shadow-sm'
-                    : 'text-stone-600 hover:text-stone-900 hover:bg-white'
-                }`}
-              >
-                {range.label}
-              </button>
-            ))}
+            <select value={selectedMonth} onChange={(event) => setSelectedMonth(Number(event.target.value))} className="px-3 py-2 rounded-lg border border-stone-200 bg-white text-xs font-semibold text-stone-700">
+              {Array.from({ length: 12 }, (_, index) => index + 1).map((month) => <option key={month} value={month}>{new Date(2000, month - 1).toLocaleString('default', { month: 'short' })}</option>)}
+            </select>
+            <select value={selectedYear} onChange={(event) => setSelectedYear(Number(event.target.value))} className="px-3 py-2 rounded-lg border border-stone-200 bg-white text-xs font-semibold text-stone-700">
+              {Array.from({ length: 21 }, (_, index) => new Date().getFullYear() - 10 + index).map((year) => <option key={year} value={year}>{year}</option>)}
+            </select>
           </div>
         </div>
       </div>
@@ -223,10 +239,10 @@ export const AdvancedRevenueAnalytics: React.FC = () => {
             <Calendar className="w-5 h-5 text-[#9D3373]" />
           </div>
           <p className="font-serif-display text-2xl font-light italic text-[#9D3373] mb-2">
-            {analytics.period}
+            {selectedPeriodLabel}
           </p>
           <p className="text-[10px] text-stone-500">
-            Comparing to previous {TIME_RANGES.find((r) => r.value === selectedRange)?.label.toLowerCase()}
+            Comparing {new Date(selectedYear, selectedMonth - 1).toLocaleString('default', { month: 'long', year: 'numeric' })} with the previous month
           </p>
         </div>
       </div>
@@ -234,7 +250,7 @@ export const AdvancedRevenueAnalytics: React.FC = () => {
       {/* Revenue Trend Chart */}
       <div className="bg-white border border-stone-200 rounded-3xl p-6 md:p-8 shadow-xs">
         <h4 className="text-sm font-bold text-stone-700 uppercase tracking-widest mb-6">
-          Revenue Trend - {analytics.period}
+          Revenue Trend - {selectedPeriodLabel}
         </h4>
         <ResponsiveContainer width="100%" height={350}>
           <LineChart data={analytics.revenueData}>
@@ -275,7 +291,7 @@ export const AdvancedRevenueAnalytics: React.FC = () => {
       {/* Bookings Trend Chart */}
       <div className="bg-white border border-stone-200 rounded-3xl p-6 md:p-8 shadow-xs">
         <h4 className="text-sm font-bold text-stone-700 uppercase tracking-widest mb-6">
-          Bookings Trend - {analytics.period}
+          Bookings Trend - {selectedPeriodLabel}
         </h4>
         <ResponsiveContainer width="100%" height={350}>
           <BarChart data={analytics.bookingData}>
@@ -320,11 +336,11 @@ export const AdvancedRevenueAnalytics: React.FC = () => {
             <ResponsiveContainer width="100%" height={300}>
               <RePieChart>
                 <Pie
-                  data={analytics.categoryBreakdown}
+                  data={analytics.categoryBreakdown.map((entry) => ({ ...entry, name: entry.category }))}
                   cx="50%"
                   cy="50%"
                   labelLine={false}
-                  label={(entry) => `${entry.category}: ${entry.percentage.toFixed(1)}%`}
+                  label={(entry) => `${entry.name}: ${((entry.percent || 0) * 100).toFixed(1)}%`}
                   outerRadius={100}
                   fill="#8884d8"
                   dataKey="revenue"

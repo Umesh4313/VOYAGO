@@ -256,6 +256,8 @@ export const AdminDashboard: React.FC = () => {
 
   const [hotelPartners, setHotelPartners] = useState<PartnerSummary[]>([]);
   const [vehiclePartners, setVehiclePartners] = useState<PartnerSummary[]>([]);
+  const [hotelPartnerFilter, setHotelPartnerFilter] = useState<'ALL' | 'PENDING' | 'APPROVED' | 'SUSPENDED'>('ALL');
+  const [vehiclePartnerFilter, setVehiclePartnerFilter] = useState<'ALL' | 'PENDING' | 'APPROVED' | 'SUSPENDED'>('ALL');
   const [loadingPartners, setLoadingPartners] = useState(false);
   const [partnerInventory, setPartnerInventory] = useState<PartnerInventory | null>(null);
   const [loadingInventory, setLoadingInventory] = useState(false);
@@ -332,6 +334,8 @@ export const AdminDashboard: React.FC = () => {
   });
   const [toast, setToast] = useState<string | null>(null);
   const [bookingFilter, setBookingFilter] = useState<'ALL' | Booking['status']>('ALL');
+  const [bookingMonth, setBookingMonth] = useState<number>(0);
+  const [bookingYear, setBookingYear] = useState<number>(new Date().getFullYear());
   const [expandedBookingId, setExpandedBookingId] = useState<string | null>(null);
   const [userRoleFilter, setUserRoleFilter] = useState<'ALL' | 'CUSTOMER' | 'HOTEL_PARTNER' | 'VEHICLE_PARTNER'>('ALL');
 
@@ -436,8 +440,11 @@ export const AdminDashboard: React.FC = () => {
   );
 
   const filteredBookings = bookings.filter((booking) => (
-    bookingFilter === 'ALL' || booking.status === bookingFilter
+    (bookingFilter === 'ALL' || booking.status === bookingFilter) &&
+    (bookingMonth === 0 || (new Date(booking.createdAt).getMonth() + 1 === bookingMonth && new Date(booking.createdAt).getFullYear() === bookingYear))
   ));
+  const visibleHotelPartners = hotelPartners.filter((partner) => hotelPartnerFilter === 'ALL' || partner.partnerStatus === hotelPartnerFilter);
+  const visibleVehiclePartners = vehiclePartners.filter((partner) => vehiclePartnerFilter === 'ALL' || partner.partnerStatus === vehiclePartnerFilter);
 
   const handleBookingStatus = async (booking: Booking, status: Booking['status']) => {
     try {
@@ -577,15 +584,6 @@ export const AdminDashboard: React.FC = () => {
                   Cross-platform control over destinations, transport inventory, hotel &amp; vehicle partners, and audit logs.
                 </p>
               </div>
-            </div>
-            <div className="flex items-center gap-3">
-              <button
-                type="button"
-                onClick={logout}
-                className="px-5 py-2.5 rounded-full border border-stone-300 hover:border-stone-400 text-xs font-bold uppercase tracking-wider text-stone-700 bg-white hover:bg-stone-50 transition-colors cursor-pointer"
-              >
-                Exit to Customer View
-              </button>
             </div>
           </div>
         </div>
@@ -1182,21 +1180,24 @@ export const AdminDashboard: React.FC = () => {
                     </p>
                   </div>
                   <span className="text-xs text-[#9D3373] font-medium px-3 py-1 rounded-full bg-[#9D3373]/10 border border-[#9D3373]/20">
-                    {hotelPartners.length} Active Partners
+                    {visibleHotelPartners.length} Partners
                   </span>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {(['ALL', 'PENDING', 'APPROVED', 'SUSPENDED'] as const).map((status) => <button key={status} type="button" onClick={() => setHotelPartnerFilter(status)} className={`px-3 py-2 rounded-lg text-xs font-bold ${hotelPartnerFilter === status ? 'bg-[#9D3373] text-white' : 'bg-stone-100 text-stone-600'}`}>{status === 'ALL' ? `All (${hotelPartners.length})` : `${status} (${hotelPartners.filter((partner) => partner.partnerStatus === status).length})`}</button>)}
                 </div>
 
                 {loadingPartners ? (
                   <div className="text-center py-8">
                     <p className="text-stone-600 text-sm">Loading hotel partners...</p>
                   </div>
-                ) : hotelPartners.length === 0 ? (
+                ) : visibleHotelPartners.length === 0 ? (
                   <div className="text-center py-8 bg-[#FAF8F5] rounded-2xl border border-dashed border-stone-300">
                     <p className="text-stone-600 text-sm">No hotel partners registered yet</p>
                   </div>
                 ) : (
                   <div className="space-y-4">
-                    {hotelPartners.map((partner) => (
+                    {visibleHotelPartners.map((partner) => (
                       <div
                         key={partner.id}
                         className="bg-[#FAF8F5] border border-stone-200 rounded-2xl p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 hover:border-stone-300 transition-all"
@@ -1288,21 +1289,24 @@ export const AdminDashboard: React.FC = () => {
                     </p>
                   </div>
                   <span className="text-xs text-[#9D3373] font-medium px-3 py-1 rounded-full bg-[#9D3373]/10 border border-[#9D3373]/20">
-                    {vehiclePartners.length} Active Partners
+                    {visibleVehiclePartners.length} Partners
                   </span>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {(['ALL', 'PENDING', 'APPROVED', 'SUSPENDED'] as const).map((status) => <button key={status} type="button" onClick={() => setVehiclePartnerFilter(status)} className={`px-3 py-2 rounded-lg text-xs font-bold ${vehiclePartnerFilter === status ? 'bg-[#9D3373] text-white' : 'bg-stone-100 text-stone-600'}`}>{status === 'ALL' ? `All (${vehiclePartners.length})` : `${status} (${vehiclePartners.filter((partner) => partner.partnerStatus === status).length})`}</button>)}
                 </div>
 
                 {loadingPartners ? (
                   <div className="text-center py-8">
                     <p className="text-stone-600 text-sm">Loading vehicle partners...</p>
                   </div>
-                ) : vehiclePartners.length === 0 ? (
+                ) : visibleVehiclePartners.length === 0 ? (
                   <div className="text-center py-8 bg-[#FAF8F5] rounded-2xl border border-dashed border-stone-300">
                     <p className="text-stone-600 text-sm">No vehicle partners registered yet</p>
                   </div>
                 ) : (
                   <div className="space-y-4">
-                    {vehiclePartners.map((partner) => (
+                    {visibleVehiclePartners.map((partner) => (
                       <div
                         key={partner.id}
                         className="bg-[#FAF8F5] border border-stone-200 rounded-2xl p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 hover:border-stone-300 transition-all"
@@ -1433,6 +1437,13 @@ export const AdminDashboard: React.FC = () => {
                     <p className="text-xs text-stone-500">Full customer itineraries, inventory selections, payment records, and booking status</p>
                   </div>
                   <div className="flex flex-wrap gap-2">
+                    <select value={bookingMonth} onChange={(event) => setBookingMonth(Number(event.target.value))} className="px-3 py-2 rounded-lg border border-stone-300 text-xs font-semibold text-stone-700 bg-white">
+                      <option value={0}>All months</option>
+                      {Array.from({ length: 12 }, (_, index) => index + 1).map((month) => <option key={month} value={month}>{new Date(2000, month - 1).toLocaleString('default', { month: 'long' })}</option>)}
+                    </select>
+                    <select value={bookingYear} onChange={(event) => setBookingYear(Number(event.target.value))} className="px-3 py-2 rounded-lg border border-stone-300 text-xs font-semibold text-stone-700 bg-white">
+                      {[2024, 2025, 2026, 2027].map((year) => <option key={year} value={year}>{year}</option>)}
+                    </select>
                     {(['ALL', 'CONFIRMED', 'COMPLETED', 'CANCELLED'] as const).map((status) => (
                       <button
                         key={status}

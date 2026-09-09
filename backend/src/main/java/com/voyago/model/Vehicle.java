@@ -51,4 +51,13 @@ public class Vehicle {
     private String registrationNumber;
 
     private int modelYear;
+
+    @Builder.Default
+    private int totalUnits = 1;
+
+    @Builder.Default
+    private int bookedUnits = 0;
+
+    @Builder.Default
+    private int availableUnits = 1;
 }

@@ -50,7 +50,15 @@ public class AdminService {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new RuntimeException("User not found: " + userId));
         user.setPartnerStatus(status);
-        return userRepository.save(user);
+                User savedUser = userRepository.save(user);
+                if ("HOTEL_PARTNER".equals(user.getRole())) {
+                        hotelRepository.findByPartnerId(userId).forEach(hotel -> {
+                                hotel.setApprovalStatus(status);
+                                hotel.setStatus("APPROVED".equals(status) ? "ACTIVE" : "INACTIVE");
+                                hotelRepository.save(hotel);
+                        });
+                }
+                return savedUser;
     }
 
     public AnalyticsSummaryResponse getAnalytics() {
@@ -241,10 +249,20 @@ public class AdminService {
      * @return Revenue analytics with comparison
      */
     public RevenueAnalyticsResponse getRevenueAnalytics(int rangeMonths) {
+                return getRevenueAnalytics(rangeMonths, null, null);
+        }
+
+        public RevenueAnalyticsResponse getRevenueAnalytics(int rangeMonths, Integer selectedMonth, Integer selectedYear) {
         LocalDateTime now = LocalDateTime.now();
         LocalDateTime currentStart = now.minusMonths(rangeMonths);
+                if (selectedMonth != null && selectedYear != null) {
+                        currentStart = LocalDateTime.of(selectedYear, selectedMonth, 1, 0, 0);
+                        now = currentStart.plusMonths(1);
+                }
         LocalDateTime previousStart = currentStart.minusMonths(rangeMonths);
         LocalDateTime previousEnd = currentStart;
+                final LocalDateTime queryStart = currentStart;
+                final LocalDateTime queryEnd = now;
 
         // Get all bookings
         List<Booking> allBookings = bookingRepository.findAll();
@@ -252,16 +270,16 @@ public class AdminService {
         // Filter current period bookings
         List<Booking> currentBookings = allBookings.stream()
                 .filter(b -> !"CANCELLED".equals(b.getStatus()))
-                .filter(b -> b.getCreatedAt() != null && 
-                        b.getCreatedAt().isAfter(currentStart) && 
-                        b.getCreatedAt().isBefore(now))
+                .filter(b -> b.getCreatedAt() != null &&
+                        !b.getCreatedAt().isBefore(queryStart) &&
+                        b.getCreatedAt().isBefore(queryEnd))
                 .collect(Collectors.toList());
 
         // Filter previous period bookings
         List<Booking> previousBookings = allBookings.stream()
                 .filter(b -> !"CANCELLED".equals(b.getStatus()))
-                .filter(b -> b.getCreatedAt() != null && 
-                        b.getCreatedAt().isAfter(previousStart) && 
+                .filter(b -> b.getCreatedAt() != null &&
+                        !b.getCreatedAt().isBefore(previousStart) &&
                         b.getCreatedAt().isBefore(previousEnd))
                 .collect(Collectors.toList());
 
@@ -298,7 +316,9 @@ public class AdminService {
         List<RevenueAnalyticsResponse.CategoryBreakdown> categoryBreakdown = generateCategoryBreakdown(currentBookings, currentRevenue);
 
         // Determine period label
-        String periodLabel = getPeriodLabel(rangeMonths);
+        String periodLabel = selectedMonth != null && selectedYear != null
+                ? Month.of(selectedMonth).name() + " " + selectedYear
+                : getPeriodLabel(rangeMonths);
 
         return RevenueAnalyticsResponse.builder()
                 .period(periodLabel)
@@ -502,6 +522,10 @@ public class AdminService {
      * Get hotel partner-specific revenue analytics
      */
     public RevenueAnalyticsResponse getHotelPartnerAnalytics(String partnerId, int rangeMonths) {
+                return getHotelPartnerAnalytics(partnerId, rangeMonths, null, null);
+        }
+
+        public RevenueAnalyticsResponse getHotelPartnerAnalytics(String partnerId, int rangeMonths, Integer selectedMonth, Integer selectedYear) {
         // Get all hotels for this partner
         List<Hotel> partnerHotels = hotelRepository.findByPartnerId(partnerId);
         Set<String> hotelIds = partnerHotels.stream()
@@ -511,7 +535,14 @@ public class AdminService {
         // Filter bookings that include this partner's hotels
         LocalDateTime now = LocalDateTime.now();
         LocalDateTime currentStart = now.minusMonths(rangeMonths);
+                if (selectedMonth != null && selectedYear != null) {
+                        currentStart = LocalDateTime.of(selectedYear, selectedMonth, 1, 0, 0);
+                        now = currentStart.plusMonths(1);
+                }
         LocalDateTime previousStart = currentStart.minusMonths(rangeMonths);
+        final LocalDateTime queryStart = currentStart;
+        final LocalDateTime queryEnd = now;
+        final LocalDateTime comparisonStart = previousStart;
 
         List<Booking> allBookings = bookingRepository.findAll();
         
@@ -519,16 +550,16 @@ public class AdminService {
                 .filter(b -> b.getHotel() != null && hotelIds.contains(b.getHotel().getId()))
                 .filter(b -> !"CANCELLED".equals(b.getStatus()))
                 .filter(b -> b.getCreatedAt() != null && 
-                        b.getCreatedAt().isAfter(currentStart) && 
-                        b.getCreatedAt().isBefore(now))
+                        !b.getCreatedAt().isBefore(queryStart) &&
+                        b.getCreatedAt().isBefore(queryEnd))
                 .collect(Collectors.toList());
 
         List<Booking> previousBookings = allBookings.stream()
                 .filter(b -> b.getHotel() != null && hotelIds.contains(b.getHotel().getId()))
                 .filter(b -> !"CANCELLED".equals(b.getStatus()))
                 .filter(b -> b.getCreatedAt() != null && 
-                        b.getCreatedAt().isAfter(previousStart) && 
-                        b.getCreatedAt().isBefore(currentStart))
+                        !b.getCreatedAt().isBefore(comparisonStart) &&
+                        b.getCreatedAt().isBefore(queryStart))
                 .collect(Collectors.toList());
 
         // Calculate metrics (hotel revenue only)
@@ -559,7 +590,7 @@ public class AdminService {
         List<RevenueAnalyticsResponse.DataPoint> bookingData = generateBookingTimeSeriesData(currentBookings, currentStart, now, rangeMonths);
 
         return RevenueAnalyticsResponse.builder()
-                .period(getPeriodLabel(rangeMonths))
+                .period(selectedMonth != null && selectedYear != null ? Month.of(selectedMonth).name() + " " + selectedYear : getPeriodLabel(rangeMonths))
                 .currentRevenue(currentRevenue)
                 .previousRevenue(previousRevenue)
                 .revenueChange(revenueChange)
@@ -570,6 +601,54 @@ public class AdminService {
                 .revenueData(revenueData)
                 .bookingData(bookingData)
                 .categoryBreakdown(new ArrayList<>()) // Not needed for partner view
+                .build();
+    }
+
+    public RevenueAnalyticsResponse getVehiclePartnerAnalytics(String partnerId, int rangeMonths) {
+                return getVehiclePartnerAnalytics(partnerId, rangeMonths, null, null);
+        }
+
+        public RevenueAnalyticsResponse getVehiclePartnerAnalytics(String partnerId, int rangeMonths, Integer selectedMonth, Integer selectedYear) {
+        Set<String> vehicleIds = vehicleRepository.findByPartnerId(partnerId).stream()
+                .map(Vehicle::getId)
+                .collect(Collectors.toSet());
+        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime currentStart = now.minusMonths(rangeMonths);
+                if (selectedMonth != null && selectedYear != null) {
+                        currentStart = LocalDateTime.of(selectedYear, selectedMonth, 1, 0, 0);
+                        now = currentStart.plusMonths(1);
+                }
+        LocalDateTime previousStart = currentStart.minusMonths(rangeMonths);
+                final LocalDateTime queryStart = currentStart;
+                final LocalDateTime queryEnd = now;
+                final LocalDateTime comparisonStart = previousStart;
+        List<Booking> allBookings = bookingRepository.findAll();
+        List<Booking> currentBookings = allBookings.stream()
+                .filter(b -> b.getVehicle() != null && vehicleIds.contains(b.getVehicle().getId()))
+                .filter(b -> !"CANCELLED".equals(b.getStatus()))
+                .filter(b -> b.getCreatedAt() != null && !b.getCreatedAt().isBefore(queryStart) && b.getCreatedAt().isBefore(queryEnd))
+                .collect(Collectors.toList());
+        List<Booking> previousBookings = allBookings.stream()
+                .filter(b -> b.getVehicle() != null && vehicleIds.contains(b.getVehicle().getId()))
+                .filter(b -> !"CANCELLED".equals(b.getStatus()))
+                .filter(b -> b.getCreatedAt() != null && !b.getCreatedAt().isBefore(comparisonStart) && b.getCreatedAt().isBefore(queryStart))
+                .collect(Collectors.toList());
+        double currentRevenue = currentBookings.stream().mapToDouble(b -> b.getVehicle().getTotal()).sum();
+        double previousRevenue = previousBookings.stream().mapToDouble(b -> b.getVehicle().getTotal()).sum();
+        long currentCount = currentBookings.size();
+        long previousCount = previousBookings.size();
+        return RevenueAnalyticsResponse.builder()
+                .period(selectedMonth != null && selectedYear != null ? Month.of(selectedMonth).name() + " " + selectedYear : getPeriodLabel(rangeMonths))
+                .currentRevenue(currentRevenue)
+                .previousRevenue(previousRevenue)
+                .revenueChange(previousRevenue > 0 ? ((currentRevenue - previousRevenue) / previousRevenue) * 100 : 0)
+                .currentBookings(currentCount)
+                .previousBookings(previousCount)
+                .bookingChange(previousCount > 0 ? ((double) (currentCount - previousCount) / previousCount) * 100 : 0)
+                .averageOrderValue(currentCount > 0 ? currentRevenue / currentCount : 0)
+                .revenueData(generateTimeSeriesData(currentBookings, currentStart, now, rangeMonths))
+                .bookingData(generateBookingTimeSeriesData(currentBookings, currentStart, now, rangeMonths))
+                .categoryBreakdown(new ArrayList<>())
                 .build();
     }
 }

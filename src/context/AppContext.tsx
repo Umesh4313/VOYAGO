@@ -97,13 +97,13 @@ interface AppContextType {
   updateBookingStatus: (bookingId: string, status: Booking['status']) => Promise<Booking>;
 
   // Partner & Admin mutation functions
-  updateHotelRoomPrice: (hotelId: string, roomId: string, newPrice: number) => void;
-  updateHotelRoomDetails: (hotelId: string, roomId: string, newPrice: number, newTotalUnits: number, details?: Partial<Pick<HotelRoom, 'name' | 'bedType' | 'maxGuests'>>) => void;
+  updateHotelRoomPrice: (hotelId: string, roomId: string, newPrice: number) => Promise<void>;
+  updateHotelRoomDetails: (hotelId: string, roomId: string, newPrice: number, newTotalUnits: number, details?: Partial<Pick<HotelRoom, 'name' | 'bedType' | 'maxGuests'>>) => Promise<void>;
   addHotelRoomType: (hotelId: string, room: Omit<HotelRoom, 'id' | 'availableCount'>) => Promise<Hotel>;
   addHotel: (hotel: Omit<Hotel, 'id'>) => Promise<Hotel>;
   toggleHotelRoomAvailability: (hotelId: string, roomId: string) => void;
 
-  updateVehiclePriceAndStatus: (vehicleId: string, newDailyRate: number, isAvailable: boolean) => void;
+  updateVehiclePriceAndStatus: (vehicleId: string, newDailyRate: number, isAvailable: boolean, totalUnits?: number) => Promise<void>;
   setVehicleRentalStatus: (vehicleId: string, status: VehicleRentalStatus) => void;
   addVehicle: (vehicle: Omit<Vehicle, 'id'>) => Promise<Vehicle>;
   addMaintenanceRecord: (record: Omit<MaintenanceRecord, 'id'>) => void;
@@ -464,7 +464,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   useEffect(() => {
     let isCurrent = true;
-    Promise.all([hotelService.getAll(), vehicleService.getAll(), transportService.getAll()])
+    const refreshCatalog = () => Promise.all([hotelService.getAll(), vehicleService.getAll(), transportService.getAll()])
       .then(([remoteHotels, remoteVehicles, remoteTransport]) => {
         if (!isCurrent) return;
         setHotels(remoteHotels.map((hotel) => ({
@@ -476,12 +476,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             availableCount: room.availableCount ?? 0,
           })),
         })));
-        setVehicles(remoteVehicles);
+        setVehicles(remoteVehicles.map((vehicle) => ({
+          ...vehicle,
+          imageUrl: vehicle.imageUrl?.includes('/photos/')
+            ? 'https://images.unsplash.com/photo-1558981806-ec527fa84c39?w=600&auto=format&fit=crop&q=80'
+            : vehicle.imageUrl,
+          totalUnits: vehicle.totalUnits || 1,
+          bookedUnits: vehicle.bookedUnits || 0,
+          availableUnits: vehicle.availableUnits ?? Math.max(0, (vehicle.totalUnits || 1) - (vehicle.bookedUnits || 0)),
+        })));
         setTravelOptions(remoteTransport);
       })
       .catch((error) => console.error('Failed to load live catalog inventory.', error));
+    refreshCatalog();
+    const catalogTimer = window.setInterval(refreshCatalog, 5000);
     return () => {
       isCurrent = false;
+      window.clearInterval(catalogTimer);
     };
   }, []);
 
@@ -656,7 +667,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     // 3. Vehicle availability (if not skipped)
     if (!draft.skipVehicle && draft.selectedVehicle) {
       const liveVehicle = vehicles.find((v) => v.id === draft.selectedVehicle?.id);
-      if (!liveVehicle || !liveVehicle.isAvailable || liveVehicle.rentalStatus === 'MAINTENANCE') {
+      if (!liveVehicle || (liveVehicle.availableUnits ?? (liveVehicle.isAvailable ? 1 : 0)) <= 0 || liveVehicle.rentalStatus === 'MAINTENANCE') {
         return {
           isAvailable: false,
           reason: `The vehicle "${draft.selectedVehicle.name}" is undergoing maintenance or is currently reserved. You may choose another vehicle or click "Skip".`,
@@ -940,18 +951,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   // Hotel Partner Operations
-  const updateHotelRoomPrice = (hotelId: string, roomId: string, newPrice: number) => {
-    setHotels((prev) =>
-      prev.map((h) => {
-        if (h.id === hotelId) {
-          return {
-            ...h,
-            rooms: h.rooms.map((r) => (r.id === roomId ? { ...r, pricePerNight: newPrice } : r)),
-          };
-        }
-        return h;
-      })
-    );
+  const updateHotelRoomPrice = async (hotelId: string, roomId: string, newPrice: number) => {
+    const hotel = hotels.find((item) => item.id === hotelId);
+    if (!hotel) return;
+    const updatedHotel = await hotelService.update(hotelId, {
+      ...hotel,
+      rooms: hotel.rooms.map((room) => room.id === roomId ? { ...room, pricePerNight: newPrice } : room),
+    });
+    setHotels((prev) => prev.map((item) => item.id === hotelId ? updatedHotel : item));
     addAuditLog('ROOM_PRICE_UPDATE', 'HotelRoom', roomId, `Room price adjusted to ₹${newPrice}/night`);
   };
 
@@ -963,36 +970,26 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     newTotalUnits: number,
     details?: Partial<Pick<HotelRoom, 'name' | 'bedType' | 'maxGuests'>>
   ) => {
-    setHotels((prev) =>
-      prev.map((h) => {
-        if (h.id === hotelId) {
-          return {
-            ...h,
-            rooms: h.rooms.map((r) => {
-              if (r.id === roomId) {
-                const booked = r.bookedUnits ?? 0;
-                const available = Math.max(0, newTotalUnits - booked);
-                return {
-                  ...r,
-                  ...details,
-                  pricePerNight: newPrice,
-                  totalUnits: newTotalUnits,
-                  availableCount: available,
-                };
-              }
-              return r;
-            }),
-          };
-        }
-        return h;
-      })
-    );
-    addAuditLog(
-      'ROOM_DETAILS_UPDATE',
-      'HotelRoom',
-      roomId,
-      `Updated room: ₹${newPrice}/night, Total Units: ${newTotalUnits}`
-    );
+    const hotel = hotels.find((item) => item.id === hotelId);
+    if (!hotel) return Promise.resolve();
+    const updatedHotel = {
+      ...hotel,
+      rooms: hotel.rooms.map((room) => {
+        if (room.id !== roomId) return room;
+        const booked = room.bookedUnits ?? 0;
+        return { ...room, ...details, pricePerNight: newPrice, totalUnits: newTotalUnits, availableCount: Math.max(0, newTotalUnits - booked) };
+      }),
+    };
+    return hotelService.update(hotelId, updatedHotel).then((savedHotel) => {
+      setHotels((prev) => prev.map((item) => item.id === hotelId ? savedHotel : item));
+    }).then(() => {
+      addAuditLog(
+        'ROOM_DETAILS_UPDATE',
+        'HotelRoom',
+        roomId,
+        `Updated room: ₹${newPrice}/night, Total Units: ${newTotalUnits}`
+      );
+    });
   };
 
   const addHotelRoomType = async (hotelId: string, roomData: Omit<HotelRoom, 'id' | 'availableCount'>) => {
@@ -1027,19 +1024,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   // Vehicle Partner Operations
-  const updateVehiclePriceAndStatus = (vehicleId: string, newDailyRate: number, isAvailable: boolean) => {
-    setVehicles((prev) =>
-      prev.map((v) =>
-        v.id === vehicleId
-          ? {
-              ...v,
-              dailyRate: newDailyRate,
-              isAvailable,
-              rentalStatus: isAvailable ? 'AVAILABLE' : 'RESERVED',
-            }
-          : v
-      )
-    );
+  const updateVehiclePriceAndStatus = async (vehicleId: string, newDailyRate: number, isAvailable: boolean, totalUnits?: number) => {
+    const vehicle = vehicles.find((item) => item.id === vehicleId);
+    if (!vehicle) return;
+    const units = Math.max(1, totalUnits ?? vehicle.totalUnits ?? 1);
+    const updatedVehicle = await vehicleService.update(vehicleId, {
+      ...vehicle,
+      dailyRate: newDailyRate,
+      totalUnits: units,
+      bookedUnits: vehicle.bookedUnits ?? 0,
+      availableUnits: Math.max(0, units - (vehicle.bookedUnits ?? 0)),
+      isAvailable,
+      rentalStatus: isAvailable ? 'AVAILABLE' : 'RESERVED',
+    });
+    setVehicles((prev) => prev.map((item) => item.id === vehicleId ? updatedVehicle : item));
     addAuditLog(
       'VEHICLE_UPDATE',
       'Vehicle',

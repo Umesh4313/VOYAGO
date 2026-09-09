@@ -75,6 +75,8 @@ public class Booking {
         private String roomId;
         private String roomType;
         private String roomName;
+        @Builder.Default
+        private int roomUnits = 1;
         private double pricePerNight;
         private String condition;
         private int nights;
@@ -93,6 +95,8 @@ public class Booking {
         private double dailyRate;
         private int days;
         private double total;
+        @Builder.Default
+        private int units = 1;
     }
 
     @Data

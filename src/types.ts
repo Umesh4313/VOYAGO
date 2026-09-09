@@ -80,6 +80,8 @@ export interface Hotel {
   status?: 'ACTIVE' | 'INACTIVE';
   approvalStatus?: 'PENDING' | 'APPROVED' | 'REJECTED' | 'SUSPENDED';
   rejectionReason?: string;
+  bookingAlertsEnabled?: boolean;
+  autoCheckInEnabled?: boolean;
 }
 
 export type VehicleType = 'CAR' | 'BIKE' | 'SCOOTER';
@@ -103,6 +105,9 @@ export interface Vehicle {
   partnerId: string;
   registrationNumber?: string;
   modelYear?: number;
+  totalUnits?: number;
+  bookedUnits?: number;
+  availableUnits?: number;
 }
 
 export interface MaintenanceRecord {
@@ -198,6 +203,7 @@ export interface Booking {
     name: string;
     roomType: string;
     roomName: string;
+    roomUnits?: number;
     pricePerNight: number;
     nights: number;
     total: number;

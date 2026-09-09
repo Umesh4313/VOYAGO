@@ -19,6 +19,7 @@ export interface BookingRequest {
   roomName?: string;
   roomCondition?: 'AC' | 'NON_AC';
   vehicleId?: string;
+  vehicleUnits?: number;
   placeIds?: string[];
   paymentMethod: PaymentMethod;
 }
@@ -86,6 +87,7 @@ export const bookingService = {
       roomName: draft.selectedRoom?.name,
       roomCondition: draft.roomCondition,
       vehicleId: !draft.skipVehicle ? draft.selectedVehicle?.id : undefined,
+      vehicleUnits: 1,
       placeIds: draft.selectedPlaces.map(p => p.id),
       paymentMethod,
     };

@@ -59,7 +59,7 @@ export const AuthModal: React.FC = () => {
       if (typeof responseData === 'string') return responseData;
       const messages = Object.values(responseData || {}).filter(Boolean);
       if (messages.length > 0) return messages.join(' ');
-      return `Request failed (${error.response.status}). Please try again.`;
+      return `Request failed (${error.response.status}) at ${error.config?.url || 'the server'}. Please try again.`;
     }
     return error instanceof Error ? error.message : 'Unable to complete this request.';
   };
@@ -139,7 +139,7 @@ export const AuthModal: React.FC = () => {
         && response.partnerStatus !== 'APPROVED';
       setActiveView(
         isPendingPartner
-          ? 'home'
+          ? response.role === 'HOTEL_PARTNER' ? 'hotel-partner' : 'vehicle-partner'
           : response.role === 'HOTEL_PARTNER'
           ? 'hotel-partner'
           : response.role === 'VEHICLE_PARTNER'

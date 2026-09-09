@@ -25,15 +25,7 @@ export const VisualSeatPicker: React.FC<VisualSeatPickerProps> = ({
   const leftCols = ['A', 'B'];
   const rightCols = ['C', 'D'];
 
-  // Default occupied seats based on transport id so it's consistent
-  const defaultOccupied = [
-    ...(transport.mode === 'TRAIN'
-      ? ['1B', '2C', '3A', '4D', '6B', '7C', '9A', '10D']
-      : transport.mode === 'BUS'
-      ? ['1A', '2D', '4B', '6C', '8A']
-      : ['1B', '2D', '3A', '4B', '4C', '6A', '7C', '8B']),
-    ...(transport.occupiedSeats || []),
-  ];
+  const defaultOccupied = transport.occupiedSeats || [];
 
   const handleSeatClick = (seatCode: string) => {
     if (defaultOccupied.includes(seatCode)) {

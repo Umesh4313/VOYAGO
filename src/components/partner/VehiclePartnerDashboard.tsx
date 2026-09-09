@@ -25,6 +25,8 @@ import {
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { Vehicle } from '../../types';
+import { HotelPartnerAnalytics } from './HotelPartnerAnalytics';
+import vehicleService from '../../services/vehicleService';
 
 type VehicleTab =
   | 'dashboard'
@@ -51,6 +53,7 @@ export const VehiclePartnerDashboard: React.FC = () => {
     logout,
     addNotification,
     notifications,
+    updateProfile,
   } = useApp();
 
   // Partner manages Goa fleet
@@ -61,6 +64,7 @@ export const VehiclePartnerDashboard: React.FC = () => {
   const [activeTab, setActiveTab] = useState<VehicleTab>('dashboard');
   const [revenuePeriod, setRevenuePeriod] = useState<RevenuePeriod>('current');
   const [rentalReturns, setRentalReturns] = useState<Record<string, { pickup: string; returnAt?: string }>>({});
+  const [rentalBookingFilter, setRentalBookingFilter] = useState<'ALL' | 'CANCELLED' | 'CONFIRMED' | 'UPCOMING'>('ALL');
 
   // Add Vehicle form state
   const [name, setName] = useState('');
@@ -74,14 +78,17 @@ export const VehiclePartnerDashboard: React.FC = () => {
     'https://images.unsplash.com/photo-1549399542-7e3f8b79c341?w=600&auto=format&fit=crop&q=80'
   );
   const [vehicleDestinationId, setVehicleDestinationId] = useState('dest-goa');
+  const [totalUnits, setTotalUnits] = useState(1);
+  const operatingDestination = destinations.find((destination) => destination.id === (myVehicles[0]?.destinationId || vehicleDestinationId));
 
   // Edit vehicle state
   const [editingVehicleId, setEditingVehicleId] = useState<string | null>(null);
   const [editPrice, setEditPrice] = useState<number>(0);
+  const [editUnits, setEditUnits] = useState<number>(1);
   const [toast, setToast] = useState<string | null>(null);
 
   // Maintenance records state
-  const [maintenanceRecords, setMaintenanceRecords] = useState([
+  const [maintenanceRecords, setMaintenanceRecords] = useState(() => currentUser.email === 'vehicle@gmail.com' ? [
     {
       id: 'maint-1',
       vehicleName: 'Mahindra Thar 4x4',
@@ -98,15 +105,23 @@ export const VehiclePartnerDashboard: React.FC = () => {
       cost: 1650,
       status: 'Completed',
     },
-  ]);
+  ] : []);
 
-  const [newMaintVehicle, setNewMaintVehicle] = useState('Mahindra Thar 4x4');
+  const [newMaintVehicle, setNewMaintVehicle] = useState(myVehicles[0]?.name || '');
   const [newMaintType, setNewMaintType] = useState('Oil & Filter Change');
   const [newMaintCost, setNewMaintCost] = useState(2500);
+  const [pickupPolicy, setPickupPolicy] = useState('Airport and city hubs');
+  const [depositLimit, setDepositLimit] = useState(10000);
+  const [profileEditing, setProfileEditing] = useState(false);
 
   const vehicleBookings = bookings.filter((b) =>
     b.vehicle !== undefined && myVehicles.some((vehicle) => vehicle.id === b.vehicle?.id)
   );
+  const filteredVehicleBookings = vehicleBookings.filter((booking) => {
+    if (rentalBookingFilter === 'ALL') return true;
+    if (rentalBookingFilter === 'UPCOMING') return booking.status === 'CONFIRMED' && booking.departureDate >= new Date().toISOString().slice(0, 10);
+    return booking.status === rentalBookingFilter;
+  });
   const totalRevenue = vehicleBookings.reduce((sum, b) => sum + (b.vehicle?.total || 0), 0);
   const periodConfig: Record<RevenuePeriod, { label: string; factor: number; points: string[] }> = {
     current: { label: 'Current period', factor: 1, points: ['W1', 'W2', 'W3', 'W4'] },
@@ -134,7 +149,10 @@ export const VehiclePartnerDashboard: React.FC = () => {
       seats: Number(seats),
       transmission,
       fuelType,
-      imageUrl,
+      imageUrl: imageUrl.includes('/photos/') ? 'https://images.unsplash.com/photo-1558981806-ec527fa84c39?w=600&auto=format&fit=crop&q=80' : imageUrl,
+      totalUnits: Number(totalUnits),
+      bookedUnits: 0,
+      availableUnits: Number(totalUnits),
       isAvailable: true,
       features: ['Air Conditioning', 'Comprehensive Insurance', 'Unlimited Kilometers'],
       rating: 4.8,
@@ -154,9 +172,15 @@ export const VehiclePartnerDashboard: React.FC = () => {
     setName('');
   };
 
+  const deleteVehicle = async (vehicleId: string) => {
+    await vehicleService.delete(vehicleId);
+    setToast('Vehicle removed from your fleet.');
+    setTimeout(() => setToast(null), 2500);
+  };
+
   const handleSavePrice = (veh: Vehicle) => {
     if (editPrice > 0) {
-      updateVehiclePriceAndStatus(veh.id, editPrice, veh.isAvailable);
+                              updateVehiclePriceAndStatus(veh.id, editPrice, veh.isAvailable, editUnits);
       setEditingVehicleId(null);
       setToast(`Updated daily rental fee for ${veh.name} to ₹${editPrice}.`);
       setTimeout(() => setToast(null), 3000);
@@ -203,7 +227,7 @@ export const VehiclePartnerDashboard: React.FC = () => {
                   Fleet &amp; Rental <span className="not-italic font-normal">Operations</span>
                 </h1>
                 <p className="text-xs text-stone-500 font-normal mt-1">
-                  Manage cars, scooters, daily tariff rates, maintenance logs, and rental reservations.
+                  Manage cars, scooters, daily tariff rates, maintenance logs, and rental reservations in {currentUser.city || operatingDestination?.name || 'your selected destination'}{currentUser.state ? `, ${currentUser.state}` : ''}.
                 </p>
               </div>
             </div>
@@ -366,6 +390,7 @@ export const VehiclePartnerDashboard: React.FC = () => {
                             alt={veh.name}
                             referrerPolicy="no-referrer"
                             className="w-14 h-14 rounded-lg object-cover border border-stone-200"
+                            onError={(event) => { event.currentTarget.src = 'https://images.unsplash.com/photo-1558981806-ec527fa84c39?w=200&auto=format&fit=crop&q=80'; }}
                           />
                           <div>
                             <h4 className="font-serif-display text-base font-light text-stone-900">{veh.name}</h4>
@@ -428,6 +453,7 @@ export const VehiclePartnerDashboard: React.FC = () => {
                             alt={veh.name}
                             referrerPolicy="no-referrer"
                             className="w-16 h-16 rounded-xl object-cover border border-stone-200"
+                            onError={(event) => { event.currentTarget.src = 'https://images.unsplash.com/photo-1558981806-ec527fa84c39?w=200&auto=format&fit=crop&q=80'; }}
                           />
                           <div>
                             <div className="flex items-center gap-2">
@@ -439,6 +465,7 @@ export const VehiclePartnerDashboard: React.FC = () => {
                             <p className="text-xs text-stone-500 mt-1">
                               {veh.transmission} • {veh.seats} Seats • {veh.fuelType}
                             </p>
+                            <p className="text-xs text-stone-500">Units: {veh.availableUnits ?? (veh.isAvailable ? 1 : 0)} available / {veh.totalUnits ?? 1} total</p>
                           </div>
                         </div>
 
@@ -455,6 +482,7 @@ export const VehiclePartnerDashboard: React.FC = () => {
                                   className="w-24 bg-white border border-[#9D3373] rounded-lg px-2 py-1 text-sm text-stone-900 font-mono"
                                   autoFocus
                                 />
+                                <input type="number" min="1" value={editUnits} onChange={(event) => setEditUnits(Number(event.target.value))} className="w-16 bg-white border border-[#9D3373] rounded-lg px-2 py-1 text-sm text-stone-900" title="Total units" />
                                 <button
                                   type="button"
                                   onClick={() => handleSavePrice(veh)}
@@ -477,6 +505,7 @@ export const VehiclePartnerDashboard: React.FC = () => {
                                 onClick={() => {
                                   setEditingVehicleId(veh.id);
                                   setEditPrice(veh.dailyRate);
+                                  setEditUnits(veh.totalUnits || 1);
                                 }}
                                 className="cursor-pointer group flex items-center gap-1.5"
                                 title="Click to edit daily tariff"
@@ -493,7 +522,7 @@ export const VehiclePartnerDashboard: React.FC = () => {
                           <button
                             type="button"
                             onClick={() =>
-                              updateVehiclePriceAndStatus(veh.id, veh.dailyRate, !veh.isAvailable)
+                              updateVehiclePriceAndStatus(veh.id, veh.dailyRate, !veh.isAvailable, veh.totalUnits)
                             }
                             className={`px-3.5 py-1.5 rounded-full text-xs font-bold uppercase tracking-wider transition-all cursor-pointer ${
                               veh.isAvailable
@@ -503,6 +532,7 @@ export const VehiclePartnerDashboard: React.FC = () => {
                           >
                             {veh.isAvailable ? 'Available' : 'Reserved'}
                           </button>
+                          <button type="button" onClick={() => deleteVehicle(veh.id)} className="px-3.5 py-1.5 rounded-full text-xs font-bold uppercase tracking-wider text-rose-700 bg-rose-50 border border-rose-200 hover:bg-rose-100" title="Delete vehicle">Delete</button>
                         </div>
                       </div>
                     );
@@ -537,6 +567,7 @@ export const VehiclePartnerDashboard: React.FC = () => {
                       required
                     />
                   </div>
+                  <div><label className="text-[11px] font-bold uppercase tracking-wider text-stone-700 block mb-1.5">Total Units</label><input type="number" min="1" value={totalUnits} onChange={(event) => setTotalUnits(Number(event.target.value))} className="w-full bg-white border border-stone-300 rounded-xl px-4 py-2.5 text-xs" required /></div>
 
                   <div className="grid grid-cols-2 gap-4">
                     <div>
@@ -715,13 +746,15 @@ export const VehiclePartnerDashboard: React.FC = () => {
                   </p>
                 </div>
 
-                {vehicleBookings.length === 0 ? (
+                <div className="flex flex-wrap gap-2">{(['ALL', 'CANCELLED', 'CONFIRMED', 'UPCOMING'] as const).map((filter) => <button type="button" key={filter} onClick={() => setRentalBookingFilter(filter)} className={`px-3 py-2 rounded-lg text-xs font-bold ${rentalBookingFilter === filter ? 'bg-[#9D3373] text-white' : 'bg-stone-100 text-stone-600'}`}>{filter} ({filter === 'ALL' ? vehicleBookings.length : filteredVehicleBookings.filter((booking) => filter === 'UPCOMING' ? booking.status === 'CONFIRMED' && booking.departureDate >= new Date().toISOString().slice(0, 10) : booking.status === filter).length})</button>)}</div>
+
+                {filteredVehicleBookings.length === 0 ? (
                   <div className="bg-white border border-stone-200 rounded-2xl p-10 text-center text-stone-500 text-xs shadow-xs">
                     No active vehicle rentals at this moment.
                   </div>
                 ) : (
                   <div className="space-y-4">
-                    {vehicleBookings.map((b) => (
+                    {filteredVehicleBookings.map((b) => (
                       <div
                         key={b.id}
                         className="bg-white border border-stone-200 rounded-2xl p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-xs"
@@ -856,42 +889,8 @@ export const VehiclePartnerDashboard: React.FC = () => {
 
             {/* TAB 7: REVENUE REPORTS */}
             {activeTab === 'revenue' && (
-              <div className="bg-white border border-stone-200 rounded-3xl p-6 md:p-8 space-y-6 shadow-xs animate-in fade-in">
-                <div>
-                  <h3 className="font-serif-display text-3xl font-light italic text-stone-900 mb-2">
-                    Fleet Revenue &amp; Settlements
-                  </h3>
-                  <p className="text-xs text-stone-500 font-light">
-                    Direct automated payouts without manual claim vouchers
-                  </p>
-                </div>
-
-                <div className="flex items-center gap-1 p-1 bg-stone-100 rounded-xl w-fit">
-                  {(['current', 'last-month', 'last-year'] as RevenuePeriod[]).map((period) => (
-                    <button key={period} type="button" onClick={() => setRevenuePeriod(period)} className={`px-3 py-2 rounded-lg text-[10px] font-bold uppercase tracking-wide ${revenuePeriod === period ? 'bg-white text-[#9D3373] shadow-sm' : 'text-stone-500'}`}>
-                      {period === 'current' ? 'Current' : period === 'last-month' ? 'Last month' : 'Last year'}
-                    </button>
-                  ))}
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                  {[
-                    ['Gross revenue', periodGross, 'text-[#9D3373]'],
-                    ['Voyago commission', periodVoyagoFee, 'text-rose-700'],
-                    ['Fleet profit', periodProfit, 'text-emerald-700'],
-                    ['Rentals', vehicleBookings.length, 'text-stone-900'],
-                  ].map(([label, value, color]) => (
-                    <div key={String(label)} className="bg-[#FAF8F5] border border-stone-200 rounded-2xl p-5">
-                      <span className="text-[10px] font-bold text-stone-500 uppercase tracking-widest block mb-2">{label}</span>
-                      <span className={`font-serif-display text-3xl font-light italic ${color}`}>{label === 'Rentals' ? value : `₹${Number(value).toLocaleString()}`}</span>
-                      <span className="text-[10px] text-stone-500 block mt-2">{selectedPeriod.label}</span>
-                    </div>
-                  ))}
-                </div>
-                <div className="border border-stone-200 rounded-3xl p-6">
-                  <div className="flex items-center justify-between mb-5"><div><h4 className="font-semibold text-sm">Rental settlement performance</h4><p className="text-xs text-stone-500 mt-1">Gross revenue, platform fee, and fleet profit</p></div><span className="text-[10px] font-bold uppercase text-emerald-700 bg-emerald-50 border border-emerald-200 px-3 py-1 rounded-full">15% commission</span></div>
-                  <div className="h-64 flex items-end gap-3 sm:gap-6 border-b border-stone-200">{revenuePoints.map((point) => <div key={point.label} className="flex-1 h-full flex flex-col items-center justify-end gap-1"><span className="text-[9px] text-stone-500">₹{point.gross.toLocaleString()}</span><div className="w-full max-w-16 flex items-end gap-1 h-[78%]"><div className="flex-1 bg-[#9D3373] rounded-t-md" style={{ height: `${Math.max(8, point.gross / maxChartValue * 100)}%` }} /><div className="flex-1 bg-rose-400 rounded-t-md" style={{ height: `${Math.max(6, point.gross * 0.15 / maxChartValue * 100)}%` }} /><div className="flex-1 bg-emerald-500 rounded-t-md" style={{ height: `${Math.max(8, point.gross * 0.85 / maxChartValue * 100)}%` }} /></div><span className="text-[10px] text-stone-500">{point.label}</span></div>)}</div>
-                  <div className="flex flex-wrap gap-4 mt-4 text-[10px] font-semibold"><span className="text-[#9D3373]">■ Gross revenue</span><span className="text-rose-700">■ Voyago fee</span><span className="text-emerald-700">■ Fleet profit</span></div>
-                </div>
+              <div className="space-y-6 animate-in fade-in">
+                <HotelPartnerAnalytics partnerId={currentUser.id} partnerType="vehicle" />
               </div>
             )}
 
@@ -919,6 +918,11 @@ export const VehiclePartnerDashboard: React.FC = () => {
                 <h3 className="font-serif-display text-3xl font-light italic text-stone-900">
                   Vehicle Operator Profile
                 </h3>
+                <div className="flex gap-2">
+                  <button type="button" onClick={() => setProfileEditing((value) => !value)} className="px-4 py-2 rounded-full bg-[#9D3373] text-white text-xs font-bold">{profileEditing ? 'Close Edit' : 'Edit Profile'}</button>
+                  <button type="button" onClick={async () => { await Promise.all(myVehicles.map((vehicle) => vehicleService.delete(vehicle.id))); logout(); }} className="px-4 py-2 rounded-full bg-rose-600 text-white text-xs font-bold">Delete Fleet</button>
+                </div>
+                {profileEditing && <div className="grid sm:grid-cols-2 gap-3 max-w-lg"><input className="border rounded-lg px-3 py-2 text-sm" defaultValue={currentUser.name} placeholder="Representative name" onBlur={(event) => updateProfile({ name: event.currentTarget.value })} /><input className="border rounded-lg px-3 py-2 text-sm" defaultValue={currentUser.phone || ''} placeholder="Phone" onBlur={(event) => updateProfile({ phone: event.currentTarget.value })} /></div>}
                 <div className="space-y-3 text-xs text-stone-700 max-w-md">
                   <div className="flex justify-between py-2 border-b border-stone-200">
                     <span className="text-stone-500">Fleet Partner</span>
@@ -930,7 +934,7 @@ export const VehiclePartnerDashboard: React.FC = () => {
                   </div>
                   <div className="flex justify-between py-2 border-b border-stone-200">
                     <span className="text-stone-500">Operating Region</span>
-                    <span className="text-[#9D3373] font-medium">North &amp; South Goa</span>
+                    <span className="text-[#9D3373] font-medium">{operatingDestination?.name || 'Not selected'}</span>
                   </div>
                 </div>
               </div>
@@ -945,6 +949,7 @@ export const VehiclePartnerDashboard: React.FC = () => {
                 <p className="text-xs text-stone-500">
                   Manage pickup location hubs, fuel policies (Full-to-Full), and security deposit limits.
                 </p>
+                <div className="max-w-lg space-y-3"><label className="block text-xs font-semibold">Pickup locations<select className="mt-1 w-full border rounded-lg px-3 py-2" value={pickupPolicy} onChange={(event) => setPickupPolicy(event.target.value)}><option>Airport and city hubs</option><option>City hubs only</option><option>Hotel delivery</option></select></label><label className="block text-xs font-semibold">Security deposit limit<input type="number" className="mt-1 w-full border rounded-lg px-3 py-2" value={depositLimit} onChange={(event) => setDepositLimit(Number(event.target.value))} /></label></div>
               </div>
             )}
 

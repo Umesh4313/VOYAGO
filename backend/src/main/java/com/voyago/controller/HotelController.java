@@ -81,7 +81,7 @@ public class HotelController {
     }
 
     @DeleteMapping("/{id}")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('HOTEL_PARTNER', 'ADMIN') and @partnerApproval.isApproved(authentication)")
     public ResponseEntity<Void> delete(@PathVariable String id) {
         hotelService.delete(id);
         return ResponseEntity.noContent().build();

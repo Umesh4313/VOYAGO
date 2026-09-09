@@ -35,8 +35,10 @@ public class AdminController {
      */
     @GetMapping("/revenue-analytics")
     public ResponseEntity<RevenueAnalyticsResponse> getRevenueAnalytics(
-            @RequestParam(defaultValue = "6") int range) {
-        return ResponseEntity.ok(adminService.getRevenueAnalytics(range));
+            @RequestParam(defaultValue = "6") int range,
+            @RequestParam(required = false) Integer month,
+            @RequestParam(required = false) Integer year) {
+        return ResponseEntity.ok(adminService.getRevenueAnalytics(range, month, year));
     }
 
     /**

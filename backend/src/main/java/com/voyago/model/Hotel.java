@@ -54,4 +54,10 @@ public class Hotel {
     private String approvalStatus = "PENDING"; // PENDING | APPROVED | REJECTED | SUSPENDED
 
     private String rejectionReason;
+
+    @Builder.Default
+    private boolean bookingAlertsEnabled = true;
+
+    @Builder.Default
+    private boolean autoCheckInEnabled = false;
 }

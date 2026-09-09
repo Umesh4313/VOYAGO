@@ -80,8 +80,9 @@ public class BookingService {
                 hotel.setRooms(hotel.getRooms().stream().map(room -> {
                     if (room.getId().equals(booking.getHotel().getRoomId())) {
                         int total = room.getTotalUnits() > 0 ? room.getTotalUnits() : 8;
-                        room.setBookedUnits(Math.max(0, room.getBookedUnits() - 1));
-                        room.setAvailableCount(Math.min(total, room.getAvailableCount() + 1));
+                        int units = booking.getHotel().getRoomUnits() > 0 ? booking.getHotel().getRoomUnits() : 1;
+                        room.setBookedUnits(Math.max(0, room.getBookedUnits() - units));
+                        room.setAvailableCount(Math.min(total, room.getAvailableCount() + units));
                     }
                     return room;
                 }).collect(Collectors.toList()));
@@ -162,6 +163,7 @@ public class BookingService {
                     .roomId(room.getId())
                     .roomType(room.getType())
                     .roomName(room.getName())
+                    .roomUnits(Math.max(1, req.getRoomUnits()))
                     .pricePerNight(roomPrice)
                     .condition(req.getRoomCondition())
                     .nights(req.getDurationDays())
@@ -178,10 +180,12 @@ public class BookingService {
         if (req.getVehicleId() != null && !req.getVehicleId().isBlank()) {
             vehicle = vehicleRepository.findById(req.getVehicleId())
                     .orElseThrow(() -> new RuntimeException("Selected vehicle is no longer available."));
-            if (!vehicle.isAvailable() && !"AVAILABLE".equals(vehicle.getRentalStatus())) {
+            int requestedUnits = Math.max(1, req.getVehicleUnits());
+            int availableUnits = vehicle.getAvailableUnits() > 0 ? vehicle.getAvailableUnits() : (vehicle.getTotalUnits() > 0 ? vehicle.getTotalUnits() : 1);
+            if (availableUnits < requestedUnits || (!vehicle.isAvailable() && !"AVAILABLE".equals(vehicle.getRentalStatus()) && vehicle.getTotalUnits() <= 1)) {
                 throw new RuntimeException("Vehicle '" + vehicle.getName() + "' is not available.");
             }
-            if (hasOverlappingVehicleBooking(req, vehicle.getId())) {
+            if (hasOverlappingVehicleBooking(req, vehicle.getId(), requestedUnits, vehicle.getTotalUnits())) {
                 throw new RuntimeException("Vehicle '" + vehicle.getName() + "' is not available.");
             }
             vehicleSnapshot = Booking.BookingVehicle.builder()
@@ -190,6 +194,7 @@ public class BookingService {
                     .type(vehicle.getType())
                     .dailyRate(vehicle.getDailyRate())
                     .days(req.getDurationDays())
+                    .units(requestedUnits)
                     .total(vehicle.getDailyRate() * req.getDurationDays())
                     .build();
         }
@@ -256,7 +261,7 @@ public class BookingService {
             hotel.setRooms(hotel.getRooms().stream().map(r -> {
                 if (r.getId().equals(roomId)) {
                     int total = r.getTotalUnits() > 0 ? r.getTotalUnits() : 8;
-                    int booked = r.getBookedUnits() + 1;
+                    int booked = r.getBookedUnits() + Math.max(1, req.getRoomUnits());
                     r.setBookedUnits(booked);
                     r.setAvailableCount(Math.max(0, total - booked));
                 }
@@ -267,8 +272,12 @@ public class BookingService {
         }
 
         if (vehicle != null) {
-            vehicle.setAvailable(false);
-            vehicle.setRentalStatus("RENTED");
+            int totalUnits = vehicle.getTotalUnits() > 0 ? vehicle.getTotalUnits() : 1;
+            int bookedUnits = vehicle.getBookedUnits() + Math.max(1, req.getVehicleUnits());
+            vehicle.setBookedUnits(bookedUnits);
+            vehicle.setAvailableUnits(Math.max(0, totalUnits - bookedUnits));
+            vehicle.setAvailable(bookedUnits < totalUnits);
+            vehicle.setRentalStatus(vehicle.isAvailable() ? "AVAILABLE" : "RENTED");
             vehicleRepository.save(vehicle);
         }
 
@@ -326,15 +335,19 @@ public class BookingService {
         long overlappingRooms = bookingRepository.findByHotel_Id(hotelId).stream()
                 .filter(booking -> datesOverlap(request.getDepartureDate(), request.getReturnDate(), booking.getDepartureDate(), booking.getReturnDate()))
                 .filter(booking -> booking.getHotel() != null && room.getId().equals(booking.getHotel().getRoomId()))
-                .count();
+                .mapToLong(booking -> booking.getHotel().getRoomUnits() > 0 ? booking.getHotel().getRoomUnits() : 1)
+                .sum();
         if (overlappingRooms >= room.getTotalUnits()) {
             throw new RuntimeException("No rooms available for these dates.");
         }
     }
 
-    private boolean hasOverlappingVehicleBooking(BookingRequest request, String vehicleId) {
+    private boolean hasOverlappingVehicleBooking(BookingRequest request, String vehicleId, int requestedUnits, int totalUnits) {
         return bookingRepository.findByVehicle_Id(vehicleId).stream()
-                .anyMatch(booking -> datesOverlap(request.getDepartureDate(), request.getReturnDate(), booking.getDepartureDate(), booking.getReturnDate()));
+                .filter(booking -> !"CANCELLED".equals(booking.getStatus()))
+                .filter(booking -> datesOverlap(request.getDepartureDate(), request.getReturnDate(), booking.getDepartureDate(), booking.getReturnDate()))
+                .mapToInt(booking -> booking.getVehicle() != null && booking.getVehicle().getUnits() > 0 ? booking.getVehicle().getUnits() : 1)
+                .sum() + requestedUnits > (totalUnits > 0 ? totalUnits : 1);
     }
 
     private boolean datesOverlap(String requestedStart, String requestedEnd, String existingStart, String existingEnd) {
@@ -360,9 +373,10 @@ public class BookingService {
                 hotel.setRooms(hotel.getRooms().stream().map(r -> {
                     if (r.getId().equals(roomId)) {
                         int total = r.getTotalUnits() > 0 ? r.getTotalUnits() : 8;
-                        int booked = Math.max(0, r.getBookedUnits() - 1);
+                        int units = booking.getHotel().getRoomUnits() > 0 ? booking.getHotel().getRoomUnits() : 1;
+                        int booked = Math.max(0, r.getBookedUnits() - units);
                         r.setBookedUnits(booked);
-                        r.setAvailableCount(Math.min(total, r.getAvailableCount() + 1));
+                        r.setAvailableCount(Math.min(total, r.getAvailableCount() + units));
                     }
                     return r;
                 }).collect(Collectors.toList()));
@@ -386,8 +400,12 @@ public class BookingService {
         // Restore vehicle
         if (booking.getVehicle() != null) {
             vehicleRepository.findById(booking.getVehicle().getId()).ifPresent(v -> {
-                v.setAvailable(true);
-                v.setRentalStatus("AVAILABLE");
+                int total = v.getTotalUnits() > 0 ? v.getTotalUnits() : 1;
+                int units = booking.getVehicle().getUnits() > 0 ? booking.getVehicle().getUnits() : 1;
+                v.setBookedUnits(Math.max(0, v.getBookedUnits() - units));
+                v.setAvailableUnits(Math.min(total, total - v.getBookedUnits()));
+                v.setAvailable(v.getBookedUnits() < total);
+                v.setRentalStatus(v.isAvailable() ? "AVAILABLE" : "RENTED");
                 vehicleRepository.save(v);
             });
         }
@@ -417,7 +435,11 @@ public class BookingService {
             throw new RuntimeException("A cancelled booking cannot be reopened.");
         }
         booking.setStatus(normalizedStatus);
-        return bookingRepository.save(booking);
+        Booking updated = bookingRepository.save(booking);
+        if ("COMPLETED".equals(normalizedStatus)) {
+            releaseCompletedInventory(updated);
+        }
+        return updated;
     }
 
     public long countByStatus(String status) {
